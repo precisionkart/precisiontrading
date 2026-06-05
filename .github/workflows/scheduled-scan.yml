@@ -1,0 +1,53 @@
+name: scheduled-scan
+
+# Runs the nightly scan on GitHub's runners (a home-ish IP that Finviz is less
+# likely to 403 than the Streamlit Cloud data-center IP), then publishes the
+# result to the `data` branch, which the read-only Streamlit app is deployed
+# from. main stays code-only; the data branch is force-refreshed each run.
+
+on:
+  schedule:
+    # 21:30 UTC = 17:30 ET during EDT (summer). In EST (winter) this fires at
+    # 16:30 ET — still after the 16:00 close. Adjust here if you prefer.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch: {}        # allow manual runs from the Actions tab
+
+permissions:
+  contents: write              # needed to push the data branch
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scan and publish
+        env:
+          PINPOINT_REQUEST_DELAY: "2"      # gentler on Finviz from CI
+        run: python scan.py --publish --cache-top 250
+
+      - name: Publish to data branch
+        run: |
+          git config user.name "pinpoint-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout -B data main
+          git add -f data/latest_scan.json \
+                     data/store/universe_latest.parquet data/store/universe_latest.json \
+                     data/ohlcv data/theme_history.json data/ipo_highs.json
+          git commit -m "scheduled scan $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no changes"
+          git push -f origin data

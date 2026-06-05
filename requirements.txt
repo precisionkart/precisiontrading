@@ -1,0 +1,31 @@
+# Pinpoint Trading Scanner — dependencies (all free)
+# Pinned to versions verified working with the strategy spec (Section 4).
+
+# --- Finviz access ---
+finvizfinance==1.3.0      # Finviz screener / quote / fundamentals (spec Section 4)
+
+# --- Data wrangling ---
+pandas>=2.0
+numpy>=1.24
+
+# --- OHLCV price history (Phase 3) ---
+yfinance>=0.2.40          # primary daily/weekly bars
+# NOTE: pandas-datareader (0.10) is unmaintained and imports the removed
+# `distutils`, so it crashes on Python 3.12. The Stooq fallback is therefore
+# implemented directly against Stooq's free CSV endpoint (ohlcv.py) — no extra
+# dependency. requests/pandas (already present) cover it.
+pyarrow>=15.0             # parquet OHLCV cache
+
+# --- Charts & reports (Phase 4) ---
+mplfinance>=0.12.10b0     # annotated candlesticks
+jinja2>=3.1               # HTML report
+openpyxl>=3.1             # Excel output
+
+# --- Terminal UX (optional) ---
+rich>=13.0                # nice terminal tables
+
+# --- Web app (Phase 7) ---
+streamlit>=1.30           # web dashboard / My Picks analyzer
+
+# --- Tests ---
+pytest>=7.4

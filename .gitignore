@@ -1,0 +1,21 @@
+# virtualenv
+.venv/
+
+# data cache (OHLCV), snapshots, persisted state — all regenerated
+data/
+
+# generated reports / charts / spreadsheets
+output/
+
+# secrets
+.env
+.streamlit/secrets.toml
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# misc
+.DS_Store
+*.log
