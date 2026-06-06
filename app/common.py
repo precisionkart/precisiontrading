@@ -491,17 +491,28 @@ def render_detail_inline(pr) -> None:
 
 
 def render_treemap(rows, key: str = "treemap"):
-    """Render the sector treemap as a VISUAL widget. (Streamlit doesn't reliably
-    surface Plotly treemap click events, so filtering is handled by a selectbox
-    alongside — see the Dashboard view. Returns None.)"""
-    import charts_plotly as cp
-    fig = cp.sector_treemap(rows)
-    if fig is None:
+    """Sector heatmap as floating rounded colored tiles on the white page (a CSS
+    grid — sized by rank weight, colored by RS). Visual-only; the selectbox
+    alongside handles filtering. Returns None."""
+    import dashboard_logic as dl
+    tiles = dl.heatmap_tiles(rows)
+    if not tiles:
         st.markdown("<div class='pp-empty'>Theme rankings unavailable.</div>",
                     unsafe_allow_html=True)
         return None
-    st.plotly_chart(fig, use_container_width=True, key=key,
-                    config={"displayModeBar": False})
+    cells = []
+    for t in tiles:
+        score = t.get("score")
+        rs_txt = f"RS {score:.0f}" if score is not None else ""
+        hot = " ◦" if t.get("hot") else ""
+        hover = _html.escape(f"{t['label']} · {rs_txt} · top: {t.get('top3','—')}")
+        grow = max(0.6, float(t.get("weight", 1.0)))
+        cells.append(
+            f"<div class='pp-heat-tile' title='{hover}' "
+            f"style='flex:{grow} 1 120px;background:{t['color']}'>"
+            f"<span class='name'>{_html.escape(str(t['label']))}{hot}</span>"
+            f"<span class='rs'>{rs_txt}</span></div>")
+    st.markdown(f"<div class='pp-heat'>{''.join(cells)}</div>", unsafe_allow_html=True)
     return None
 
 

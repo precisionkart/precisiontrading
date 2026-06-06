@@ -126,6 +126,41 @@ def sector_strength_rows(themes: list, prior_scores: Optional[dict] = None,
     return sorted(out, key=lambda r: (r["rank"] is None, r["rank"]))
 
 
+def _lerp_hex(a: str, b: str, t: float) -> str:
+    t = max(0.0, min(1.0, t))
+    ar, ag, ab = int(a[1:3], 16), int(a[3:5], 16), int(a[5:7], 16)
+    br, bg, bb = int(b[1:3], 16), int(b[3:5], 16), int(b[5:7], 16)
+    return "#%02X%02X%02X" % (round(ar + (br - ar) * t), round(ag + (bg - ag) * t),
+                              round(ab + (bb - ab) * t))
+
+
+def tile_color(rs: Optional[float], smax: float) -> str:
+    """Sector tile color: green for positive RS (intensity by magnitude), red for
+    negative. Dark-enough green/red for white text — never near-black."""
+    if rs is None or (isinstance(rs, float) and rs != rs) or smax <= 0:
+        return "#6B7280"
+    frac = max(-1.0, min(1.0, rs / smax))
+    if frac >= 0:
+        return _lerp_hex("#166534", "#00D964", frac)   # green-700 -> fluoro green
+    return _lerp_hex("#166534", "#FF3366", -frac)        # toward red for negatives
+
+
+def heatmap_tiles(rows: list) -> list[dict]:
+    """Build tile descriptors (color + size weight + hover) for the CSS-grid
+    sector heatmap. `rows` from treemap_data."""
+    if not rows:
+        return []
+    smax = max((abs(r["score"]) for r in rows if r.get("score") is not None), default=1.0) or 1.0
+    out = []
+    for r in rows:
+        out.append({
+            "label": r["label"], "score": r.get("score"),
+            "weight": r.get("value", 1.0), "color": tile_color(r.get("score"), smax),
+            "hot": r.get("hot"), "delta": r.get("delta"), "top3": r.get("top3", "—"),
+        })
+    return out
+
+
 def delta_str(delta: Optional[float]) -> str:
     if delta is None:
         return "—"

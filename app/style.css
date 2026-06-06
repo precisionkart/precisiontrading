@@ -136,6 +136,17 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-pill.near { color: var(--amber); border-color: var(--amber); }
 .pp-pill.fail { color: var(--down); border-color: var(--down); }
 
+/* sector heatmap — floating rounded colored tiles on white */
+.pp-heat { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.pp-heat-tile { border-radius: 8px; min-height: 88px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; color: #fff; padding: 10px 14px; text-align: center; }
+.pp-heat-tile .name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
+.pp-heat-tile .rs { font-family: 'Geist Mono', monospace; font-size: 12px; opacity: 0.92; margin-top: 2px; }
+
+/* plotly charts sit directly on the white page — no container fill/padding */
+[data-testid="stPlotlyChart"] { background: transparent !important; }
+.js-plotly-plot, .plot-container { background: transparent !important; }
+
 /* dataframes (earnings / full scan) */
 [data-testid="stDataFrame"] { font-variant-numeric: tabular-nums; }
 [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { border-color: var(--border) !important; }

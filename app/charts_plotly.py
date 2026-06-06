@@ -153,19 +153,23 @@ def sector_treemap(rows: list) -> Optional[go.Figure]:
             text=text, textinfo="text", textposition="middle center",
             textfont=dict(family="Geist, sans-serif", size=15, color="#FFFFFF"),
             insidetextfont=dict(family="Geist, sans-serif", size=15, color="#FFFFFF"),
-            marker=dict(colors=scores, colorscale=[[0, cc.FLUORO_DOWN], [0.5, "#1F2937"],
-                                                   [1, cc.FLUORO_UP]],
+            marker=dict(colors=scores,
+                        # green-dominant (most sectors are positive); negatives go
+                        # red. Midpoint is green-700 (not near-black) so low-RS
+                        # tiles read as colored tiles, not a dark container.
+                        colorscale=[[0, cc.FLUORO_DOWN], [0.42, "#7F1D1D"],
+                                    [0.5, "#166534"], [1, cc.FLUORO_UP]],
                         cmin=-smax, cmax=smax, cornerradius=8,
                         line=dict(width=0)),          # no inter-block border lines
-            root=dict(color="rgba(0,0,0,0)"),         # transparent root (no header strip)
+            root=dict(color="#FFFFFF"),               # white background behind tiles
             pathbar=dict(visible=False),
             customdata=customdata,
             hovertemplate=("<b>%{label}</b><br>RS %{color:.1f}<br>"
                            "Δ vs prior: %{customdata[1]}  %{customdata[0]}<br>"
                            "Top: %{customdata[2]}<extra></extra>"),
             tiling=dict(pad=8), sort=True, branchvalues="total"))
-        fig.update_layout(height=300, margin=dict(l=2, r=2, t=2, b=2),
-                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        fig.update_layout(height=300, margin=dict(l=0, r=0, t=0, b=0),
+                          paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
                           font=dict(family="Geist, sans-serif", color="#FFFFFF", size=13))
         return fig
     except Exception:  # noqa: BLE001
