@@ -44,11 +44,41 @@ class RegimeView:
 # ---------------------------------------------------------------------------
 # Bootstrap.
 # ---------------------------------------------------------------------------
-def bootstrap(title: str) -> None:
-    st.set_page_config(page_title=f"Pinpoint — {title}", layout="centered",
+def page_config(title: str = "Pinpoint") -> None:
+    st.set_page_config(page_title=title, layout="wide",
                        initial_sidebar_state="expanded")
+
+
+def inject_css() -> None:
     with open(_CSS_PATH, encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+def bootstrap(title: str) -> None:
+    """Legacy single-page bootstrap (kept for standalone use)."""
+    page_config(f"Pinpoint — {title}")
+    inject_css()
+
+
+def sidebar_logo() -> None:
+    st.markdown("<div class='pp-logo'>Pin<span class='tick'>point</span></div>",
+                unsafe_allow_html=True)
+
+
+def sidebar_footer(scan, cloud: bool) -> None:
+    """Sidebar bottom: regime dot + 'Data as of HH:MM' + icon-only refresh."""
+    st.markdown("<div class='pp-side-foot'></div>", unsafe_allow_html=True)
+    if scan:
+        color = _REGIME_COLOR.get(scan["regime"].state, "#6B7280")
+        st.markdown(f"<div class='pp-regime'><span class='pp-dot' style='background:{color}'>"
+                    f"</span>{scan['regime'].state.upper()}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='pp-asof'>Data as of {_html.escape(scan.get('as_of') or '—')}</div>",
+                    unsafe_allow_html=True)
+    if st.button("↻", key="side_refresh", help="Refresh scan"):
+        st.session_state["scan"] = load_published() if cloud else full_scan()
+        for k in ("watchlist_graded_key", "open_cards", "detail_cache", "sector_filter"):
+            st.session_state.pop(k, None)
+        st.rerun()
 
 
 @st.cache_resource
@@ -342,6 +372,149 @@ def render_sector_strength(rows, key: str = "sector") -> Optional[str]:
     if rows_sel:
         return str(disp.iloc[rows_sel[0]]["Sector"])
     return None
+
+
+def tradingview_url(ticker: str) -> str:
+    return f"https://www.tradingview.com/chart/?symbol={ticker}"
+
+
+def rs_chip_html(rs) -> str:
+    """Small inline RS chip for the compact row (tier-colored)."""
+    import dashboard_logic as dl
+    bg, fg = dl.rs_tier(rs if isinstance(rs, (int, float)) else float("nan"))
+    val = "—" if (rs is None or (isinstance(rs, float) and rs != rs)) else f"{rs:.0f}"
+    return f"<span class='pp-rs' style='background:{bg};color:{fg}'>{val}</span>"
+
+
+def _row_html(row: dict, spark: str, price: float, chg: Optional[float]) -> str:
+    tk = _html.escape(str(row.get("Ticker", "")))
+    pat = _html.escape(str(row.get("Pattern") or "—"))
+    sect = _html.escape(str(row.get("Sector") or ""))
+    src = str(row.get("Source") or "")
+    score = row.get("Score")
+    rr = row.get("R:R")
+    px = f"${price:,.2f}" if price == price else "—"
+    if chg is not None and chg == chg:
+        cls = "up" if chg >= 0 else "down"
+        arrow = "▲" if chg >= 0 else "▼"
+        chg_html = f"<span class='chg {cls}'>{arrow} {abs(chg):.1f}%</span>"
+    else:
+        chg_html = ""
+    score_txt = f"{score:.1f}" if isinstance(score, (int, float)) and score == score else "—"
+    rr_txt = f"{rr:.1f}:1" if isinstance(rr, (int, float)) and rr == rr else "—"
+    src_cls = "focus" if src == "Focus" else ""
+    return (f"<div class='pp-row'>"
+            f"<span class='tk'>{tk}</span>"
+            f"<span class='px'>{px} {chg_html}</span>"
+            f"<span class='spark'>{spark}</span>"
+            f"{rs_chip_html(row.get('RS'))}"
+            f"<span class='score'>{score_txt}</span>"
+            f"<span class='pat'>{pat}</span>"
+            f"<span class='rr'>{rr_txt}</span>"
+            f"<span class='sect'>{sect}</span>"
+            f"<span class='src {src_cls}'>{_html.escape(src)}</span>"
+            f"</div>")
+
+
+def compact_card(row: dict, detail_fn, key: str) -> None:
+    """One-row compact stock card (ticker/price/sparkline/RS/score/pattern/R:R/
+    sector) with an inline expand to the detail view. Multiple can be open."""
+    import dashboard_logic as dl
+    tk = str(row.get("Ticker"))
+    open_set = st.session_state.setdefault("open_cards", set())
+    is_open = tk in open_set
+
+    daily = ohlcv_mod.fetch_daily(tk, cache_only=cloud_mode()).df
+    closes = list(daily["Close"]) if daily is not None and len(daily) else []
+    spark = dl.sparkline_svg(closes)
+    price = float(closes[-1]) if closes else float("nan")
+    chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
+
+    c1, c2 = st.columns([24, 1], vertical_alignment="center")
+    c1.markdown(_row_html(row, spark, price, chg), unsafe_allow_html=True)
+    if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
+        (open_set.discard if is_open else open_set.add)(tk)
+        st.rerun()
+    if is_open:
+        pr = detail_fn(tk)
+        if pr is not None:
+            render_detail_inline(pr)
+
+
+def render_detail_inline(pr) -> None:
+    """Expanded card body: large daily chart with right-edge pills, the 5×2
+    criterion pill grid, a template technical-analysis line, and actions."""
+    import dashboard_logic as dl
+    import charts_plotly as cp
+
+    st.markdown(f"<div class='pp-detail-head'>{rs_badge_html(pr.rs)}"
+                f"<div><span class='tk'>{_html.escape(pr.ticker)}</span> "
+                f"<span class='sub'>{_html.escape(' · '.join(str(b) for b in [pr.sector, pr.theme, pr.pattern or pr.stage] if b))}</span>"
+                f"</div></div>", unsafe_allow_html=True)
+
+    if pr.daily is not None and len(pr.daily):
+        fig = cp.daily_figure(pr.daily, entry=pr.entry, stop=pr.stop, target=pr.target,
+                              pattern_bars=pr.pattern_bars, reward_risk=pr.reward_risk)
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True, key=f"dc_{pr.ticker}")
+    else:
+        st.markdown("<div class='pp-empty'>chart unavailable (OHLCV not cached)</div>",
+                    unsafe_allow_html=True)
+
+    if pr.criteria:
+        st.markdown(pills_html(pr.criteria), unsafe_allow_html=True)
+    st.markdown(f"<div class='pp-ta'>{_html.escape(dl.technical_analysis(pr))}</div>",
+                unsafe_allow_html=True)
+
+    a1, a2 = st.columns([1, 5], vertical_alignment="center")
+    with a1:
+        if st.button("★ Save", key=f"save_{pr.ticker}"):
+            from pinpoint import store
+            store.add_to_watchlist(pr.ticker)
+            st.toast(f"{pr.ticker} added to watchlist")
+    with a2:
+        st.markdown(f"<a class='pp-tvlink' href='{tradingview_url(pr.ticker)}' "
+                    f"target='_blank'>Open in TradingView ↗</a>", unsafe_allow_html=True)
+
+
+def render_treemap(rows, key: str = "treemap"):
+    """Render the sector treemap; return a clicked sector (native select if it
+    works, else None). A selectbox fallback handles filtering reliably."""
+    import charts_plotly as cp
+    fig = cp.sector_treemap(rows)
+    if fig is None:
+        st.markdown("<div class='pp-empty'>Theme rankings unavailable.</div>",
+                    unsafe_allow_html=True)
+        return None
+    clicked = None
+    try:
+        event = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun")
+        pts = getattr(getattr(event, "selection", None), "points", None) or \
+            (event.get("selection", {}).get("points") if isinstance(event, dict) else None)
+        if pts:
+            clicked = pts[0].get("label")
+    except Exception:  # noqa: BLE001
+        st.plotly_chart(fig, use_container_width=True, key=key + "_static")
+    return clicked
+
+
+def watchlist_strip(graded, max_tiles: int = 5) -> None:
+    """Compact at-a-glance strip of up to `max_tiles` watchlist names."""
+    if not graded:
+        st.markdown("<div class='pp-empty'>No saved names yet — add from any card "
+                    "or My Picks.</div>", unsafe_allow_html=True)
+        return
+    tiles = []
+    for pr in graded[:max_tiles]:
+        cls = "pass" if pr.classification in ("A+", "near") else "fail"
+        mark = "✓" if cls == "pass" else "✗"
+        px = f"${pr.price:,.2f}" if pr.price == pr.price else "—"
+        tiles.append(f"<span class='pp-wl-tile'><span class='tk'>{_html.escape(pr.ticker)}</span>"
+                     f"<span class='pp-num'>{px}</span>{rs_chip_html(pr.rs)}"
+                     f"<span class='st {cls}'>{mark}</span></span>")
+    more = ("<span class='pp-wl-more'>+ %d more · View all → Watchlist</span>" % (len(graded) - max_tiles)) \
+        if len(graded) > max_tiles else ""
+    st.markdown(f"<div class='pp-wl-strip'>{''.join(tiles)}{more}</div>", unsafe_allow_html=True)
 
 
 def rs_badge_html(rs) -> str:

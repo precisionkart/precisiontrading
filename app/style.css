@@ -1,123 +1,140 @@
-/* Pinpoint web app — Linear/Notion/Vercel-style light mode. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Pinpoint — Phase 7.6 TradingView/Linear aesthetic (Geist + fluoro + dense). */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
 
 :root {
-  --border: #E5E5E5; --gray: #737373; --ink: #0A0A0A; --green: #16A34A;
-  --red: #DC2626; --amber: #D97706; --bg2: #FAFAFA;
+  --border: #E5E5E5; --gray: #6B7280; --ink: #0A0A0A; --bg2: #FAFAFA;
+  --up: #00D964; --down: #FF3366; --amber: #FFB800;
+  --pass-bg: #E6FFF1; --pass-fg: #046A38;
+  --fail-bg: #FFE6EC; --fail-fg: #7F0820;
 }
 
-html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select {
+  font-family: 'Geist', system-ui, -apple-system, sans-serif !important;
 }
 .stApp { background: #FFFFFF; }
-.block-container { max-width: 1080px; padding-top: 2rem; padding-bottom: 5rem;
-  font-feature-settings: "tnum" 1; }
+.block-container { max-width: 1120px; padding: 1.4rem 1.5rem 4rem; }
+.mono, .pp-num { font-family: 'Geist Mono', ui-monospace, monospace !important;
+  font-variant-numeric: tabular-nums; }
 
-/* Clean canvas — hide Streamlit chrome. */
-#MainMenu, header[data-testid="stHeader"], footer, .stDeployButton,
-[data-testid="stToolbar"], [data-testid="stStatusWidget"] { display: none !important; }
+/* clean canvas */
+#MainMenu, footer, .stDeployButton, [data-testid="stToolbar"],
+[data-testid="stStatusWidget"], [data-testid="stHeader"] { display: none !important; }
 
-/* Header. */
-.pp-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0; }
+/* headings */
+.pp-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
 .pp-h1 .dim { color: var(--gray); font-weight: 500; }
-.pp-asof { color: var(--gray); font-size: 13px; }
+.pp-sub { color: var(--gray); font-size: 13px; margin-top: 4px; }
+.pp-asof { color: var(--gray); font-size: 12px; font-family: 'Geist Mono', monospace; }
 .pp-section { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
-  color: var(--gray); font-weight: 600; margin: 28px 0 12px; }
+  color: var(--gray); font-weight: 600; margin: 16px 0 8px; }
 
-/* Regime dot. */
-.pp-regime { display: inline-flex; align-items: center; gap: 8px; font-size: 14px;
-  font-weight: 600; }
-.pp-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.pp-regime .ctx { color: var(--gray); font-weight: 400; }
+/* regime */
+.pp-regime { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
+.pp-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.pp-regime .ctx { color: var(--gray); font-weight: 400; font-size: 12px; }
 
-/* Cards. */
-.pp-card { border: 1px solid var(--border); border-radius: 8px; padding: 24px;
-  margin-bottom: 18px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); background: #fff; }
-.pp-card-head { display: flex; align-items: baseline; justify-content: space-between; }
-.pp-tk { font-size: 26px; font-weight: 700; letter-spacing: -0.03em;
+/* ---- SIDEBAR ---- */
+[data-testid="stSidebar"] { background: var(--bg2); border-right: 1px solid var(--border); }
+[data-testid="stSidebar"] .block-container { padding-top: 1.2rem; }
+.pp-logo { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; padding: 2px 4px 14px; }
+.pp-logo .tick { color: var(--up); }
+[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] { border-radius: 6px; padding: 6px 10px; }
+[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:hover { background: #F0F0F0; }
+[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"][aria-current="page"] {
+  background: rgba(0,217,100,0.12); color: var(--up) !important; font-weight: 600; }
+.pp-side-foot { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);
+  font-size: 12px; color: var(--gray); }
+
+/* ---- COMPACT STOCK CARD (one row) ---- */
+.pp-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; height: 58px; }
+.pp-row:hover { border-color: #CFCFCF; }
+.pp-row .tk { font-family: 'Geist Mono', monospace; font-weight: 600; font-size: 15px;
+  width: 64px; letter-spacing: -0.01em; }
+.pp-row .px { font-family: 'Geist Mono', monospace; font-size: 13px; width: 110px;
   font-variant-numeric: tabular-nums; }
-.pp-sub { color: var(--gray); font-size: 13px; margin-left: 10px; font-weight: 500; }
-.pp-score { font-size: 15px; font-weight: 600; }
-.pp-score .rs { color: var(--gray); font-weight: 500; margin-left: 10px; }
-.pp-chips { margin: 12px 0 14px; }
-.pp-chip { display: inline-block; border: 1px solid var(--border); border-radius: 999px;
-  padding: 3px 10px; font-size: 11px; color: #374151; margin: 0 6px 6px 0; }
-.pp-card img { width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+.pp-row .px .chg.up { color: var(--up); } .pp-row .px .chg.down { color: var(--down); }
+.pp-row .spark { width: 74px; display: flex; align-items: center; }
+.pp-row .score { font-family: 'Geist Mono', monospace; font-weight: 600; font-size: 14px; width: 42px; text-align: right; }
+.pp-row .pat { font-size: 12px; color: #374151; flex: 1; min-width: 0; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; }
+.pp-row .rr { font-family: 'Geist Mono', monospace; font-size: 12px; color: var(--gray); width: 64px; text-align: right; }
+.pp-row .sect { font-size: 11px; color: var(--gray); width: 120px; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-row .src { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; color: var(--gray); }
+.pp-row .src.focus { color: var(--up); border-color: var(--up); }
 
-/* Pills. */
-.pp-pill { display: inline-block; border-radius: 999px; padding: 3px 11px;
-  font-size: 12px; font-weight: 600; border: 1px solid; }
-.pp-pill.ok { color: var(--green); border-color: var(--green); }
+/* RS badge (small inline + large detail) */
+.pp-rs { display: inline-flex; align-items: center; justify-content: center; min-width: 30px;
+  height: 22px; border-radius: 5px; font-family: 'Geist Mono', monospace; font-weight: 600;
+  font-size: 12px; padding: 0 6px; }
+.pp-rsbadge { display: inline-flex; flex-direction: column; align-items: center;
+  justify-content: center; width: 62px; height: 62px; border-radius: 50%; }
+.pp-rsbadge .lab { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.85; }
+.pp-rsbadge .val { font-size: 24px; font-weight: 700; font-family: 'Geist Mono', monospace; line-height: 1.05; }
+
+/* expanded detail */
+.pp-detail-head { display: flex; align-items: center; gap: 14px; margin: 4px 0 4px; }
+.pp-detail-head .tk { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-family: 'Geist Mono', monospace; }
+.pp-detail-head .sub { color: var(--gray); font-size: 12px; }
+
+/* 10-criterion pills: 5 columns x 2 rows, compact */
+.pp-pills2 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 8px 0; }
+.pp-pill2 { display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  border-radius: 6px; padding: 4px 8px; height: 28px; font-size: 12px; font-weight: 500; border: 1px solid; }
+.pp-pill2 .name { display: flex; align-items: center; gap: 5px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.pp-pill2 .mk { font-weight: 700; }
+.pp-pill2 .val { font-family: 'Geist Mono', monospace; font-size: 11px; opacity: 0.85; white-space: nowrap; }
+.pp-pill2.pass { background: var(--pass-bg); border-color: var(--up); color: var(--pass-fg); }
+.pp-pill2.fail { background: var(--fail-bg); border-color: var(--down); color: var(--fail-fg); }
+
+.pp-ta { font-size: 13px; line-height: 1.5; color: #374151; margin: 8px 0 2px; }
+.pp-actions { display: flex; gap: 10px; align-items: center; margin: 6px 0 2px; }
+.pp-tvlink { font-size: 12px; color: var(--gray); text-decoration: none; }
+.pp-tvlink:hover { color: var(--ink); }
+
+/* ---- compact watchlist strip (dashboard footer) ---- */
+.pp-wl-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.pp-wl-tile { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+.pp-wl-tile .tk { font-family: 'Geist Mono', monospace; font-weight: 600; }
+.pp-wl-tile .st.pass { color: var(--up); } .pp-wl-tile .st.fail { color: var(--down); }
+.pp-wl-more { font-size: 12px; color: var(--gray); align-self: center; }
+
+/* ---- compact pills (legacy My-Picks fail checklist) ---- */
+.pp-checks { margin-top: 8px; }
+.pp-check { display: flex; justify-content: space-between; padding: 5px 0;
+  border-bottom: 1px solid var(--border); font-size: 12px; }
+.pp-check .mark.pass { color: var(--up); } .pp-check .mark.x { color: var(--down); }
+.pp-check .detail { color: var(--gray); font-family: 'Geist Mono', monospace; }
+.pp-verdict { margin-top: 8px; font-size: 12px; color: #374151; }
+.pp-pill { display:inline-block; border-radius:999px; padding:2px 9px; font-size:11px; font-weight:600; border:1px solid; }
+.pp-pill.ok { color: var(--up); border-color: var(--up); }
 .pp-pill.near { color: var(--amber); border-color: var(--amber); }
-.pp-pill.fail { color: var(--red); border-color: var(--red); }
+.pp-pill.fail { color: var(--down); border-color: var(--down); }
 
-/* 4-col Entry/Stop/Target/R:R grid. */
-.pp-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  background: var(--border); border: 1px solid var(--border); border-radius: 8px;
-  overflow: hidden; margin-top: 16px; }
-.pp-cell { background: #fff; padding: 12px 16px; }
-.pp-cell .k { color: var(--gray); font-size: 11px; text-transform: uppercase;
-  letter-spacing: 0.05em; }
-.pp-cell .v { font-size: 18px; font-weight: 600; margin-top: 3px;
-  font-variant-numeric: tabular-nums; }
-.pp-cell .v.green { color: var(--green); } .pp-cell .v.red { color: var(--red); }
-
-/* Gate checklist. */
-.pp-checks { margin-top: 12px; }
-.pp-check { display: flex; justify-content: space-between; padding: 6px 0;
-  border-bottom: 1px solid var(--border); font-size: 13px; }
-.pp-check .mark.pass { color: var(--green); } .pp-check .mark.x { color: var(--red); }
-.pp-check .detail { color: var(--gray); font-variant-numeric: tabular-nums; }
-.pp-verdict { margin-top: 12px; font-size: 13px; color: #374151; }
-
-/* Dataframes — tabular numbers, no zebra, thin borders. */
+/* dataframes (earnings / full scan) */
 [data-testid="stDataFrame"] { font-variant-numeric: tabular-nums; }
 [data-testid="stDataFrame"] td, [data-testid="stDataFrame"] th { border-color: var(--border) !important; }
 
-.pp-empty { color: var(--gray); font-size: 13px; padding: 14px; border: 1px dashed var(--border);
-  border-radius: 8px; }
+/* buttons: flat, thin border on hover */
+.stButton button { border-radius: 6px; }
+.pp-empty { color: var(--gray); font-size: 12px; padding: 12px; border: 1px dashed var(--border); border-radius: 6px; }
 
-/* ---- Phase 7.5 detail view ---- */
-/* RS badge (tiered, prominent). */
-.pp-rsbadge { display: inline-flex; flex-direction: column; align-items: center;
-  justify-content: center; width: 68px; height: 68px; border-radius: 50%; }
-.pp-rsbadge .lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
-  opacity: 0.85; line-height: 1; }
-.pp-rsbadge .val { font-size: 26px; font-weight: 700; line-height: 1.1;
-  font-variant-numeric: tabular-nums; }
-.pp-detail-head { display: flex; align-items: center; gap: 16px; margin-bottom: 6px; }
-.pp-detail-head .tk { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; }
-.pp-detail-head .sub { color: var(--gray); font-size: 13px; }
-
-/* color-coded pass/fail pills (2-col grid). */
-.pp-pills2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0 4px; }
-.pp-pill2 { display: flex; align-items: center; justify-content: space-between;
-  border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500; border: 1px solid; }
-.pp-pill2 .name { display: flex; align-items: center; gap: 7px; }
-.pp-pill2 .mk { font-weight: 700; }
-.pp-pill2 .val { font-variant-numeric: tabular-nums; font-size: 12px; opacity: 0.9; }
-.pp-pill2.pass { background: #DCFCE7; border-color: #16A34A; color: #14532D; }
-.pp-pill2.fail { background: #FEE2E2; border-color: #DC2626; color: #7F1D1D; }
-
-/* legend row under the chart. */
-.pp-legend { display: flex; gap: 20px; flex-wrap: wrap; margin: 6px 0 2px;
-  font-size: 12px; color: #374151; }
-.pp-legend .item { display: inline-flex; align-items: center; gap: 7px;
-  font-variant-numeric: tabular-nums; }
-.pp-legend .sw { width: 16px; height: 0; border-top: 2px dashed; }
-
-/* Entry/Stop/Target/R:R stat row. */
-.pp-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
-  background: var(--border); border: 1px solid var(--border); border-radius: 8px;
-  overflow: hidden; margin: 12px 0; }
-.pp-stat { background: #fff; padding: 12px 16px; }
-.pp-stat .k { color: var(--gray); font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.06em; }
-.pp-stat .v { font-size: 20px; font-weight: 700; margin-top: 3px;
-  font-variant-numeric: tabular-nums; }
-.pp-stat .v.green { color: var(--green); } .pp-stat .v.red { color: var(--red); }
-
-.pp-ta { font-size: 14px; line-height: 1.55; color: #374151; margin: 12px 0 4px; }
-.pp-hot { display: inline-block; border-radius: 999px; padding: 1px 8px; font-size: 11px;
-  font-weight: 600; color: var(--green); border: 1px solid var(--green); }
-.pp-clear { font-size: 12px; color: var(--green); cursor: pointer; }
+/* legacy big card (My Picks) */
+.pp-card { border: 1px solid var(--border); border-radius: 6px; padding: 16px; margin-bottom: 12px; background: #fff; }
+.pp-card-head { display: flex; align-items: baseline; justify-content: space-between; }
+.pp-card .tk { font-size: 22px; font-weight: 700; font-family: 'Geist Mono', monospace; letter-spacing: -0.02em; }
+.pp-card .sub { color: var(--gray); font-size: 12px; margin-left: 8px; }
+.pp-card img { width: 100%; border: 1px solid var(--border); border-radius: 6px; }
+.pp-card .score { font-size: 14px; font-weight: 600; font-family: 'Geist Mono', monospace; }
+.pp-chips { margin: 8px 0; }
+.pp-chip { display:inline-block; border:1px solid var(--border); border-radius:999px; padding:2px 9px; font-size:11px; color:#374151; margin:0 5px 5px 0; }
+.pp-grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); border-radius:6px; overflow:hidden; margin-top:12px; }
+.pp-cell { background:#fff; padding:10px 14px; }
+.pp-cell .k { color:var(--gray); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; }
+.pp-cell .v { font-size:17px; font-weight:600; font-family:'Geist Mono',monospace; margin-top:2px; }
+.pp-cell .v.green { color: var(--up); } .pp-cell .v.red { color: var(--down); }
+.pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
