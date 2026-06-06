@@ -85,4 +85,16 @@ with d[2]:
     st.download_button("Workbook XLSX", xb, f"pinpoint_{date}.xlsx",
                        use_container_width=True, disabled=not xb)
 
+st.markdown("<div class='pp-section'>Copy to TradingView</div>", unsafe_allow_html=True)
+
+
+def _tickers(df):
+    return df["ticker"].dropna().tolist() if df is not None and "ticker" in getattr(df, "columns", []) else []
+
+
+c.tv_block("Focus", _tickers(fs.get("focus")), key="tv_fs_focus")
+c.tv_block("Targets", _tickers(fs.get("targets")), key="tv_fs_targets")
+c.tv_block("Earnings", _tickers(fs.get("earnings")), key="tv_fs_earn")
+c.tv_block("IPO watchlist", _tickers(fs.get("ipo")), key="tv_fs_ipo")
+
 c.disclaimer_footer()

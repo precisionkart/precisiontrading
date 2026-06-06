@@ -91,9 +91,30 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-pill2.fail { background: var(--fail-bg); border-color: var(--down); color: var(--fail-fg); }
 
 .pp-ta { font-size: 13px; line-height: 1.5; color: #374151; margin: 8px 0 2px; }
+.pp-explain { font-size: 14px; line-height: 1.6; color: #1F2937; margin: 10px 2px 6px; }
+.pp-explain b { font-family: 'Geist Mono', monospace; font-weight: 600; color: var(--ink); }
 .pp-actions { display: flex; gap: 10px; align-items: center; margin: 6px 0 2px; }
 .pp-tvlink { font-size: 12px; color: var(--gray); text-decoration: none; }
 .pp-tvlink:hover { color: var(--ink); }
+
+/* ---- Top 3 Podium ---- */
+.pp-podium { border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; height: 100%; background: #fff; }
+.pp-podium.best { border: 1.5px solid var(--up); box-shadow: 0 0 0 3px rgba(0,217,100,0.06); }
+.pp-podium-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--up); font-weight: 700; margin-bottom: 4px; }
+.pp-podium-rank { font-family: 'Geist Mono', monospace; font-weight: 700; font-size: 24px; color: var(--gray); line-height: 1; }
+.pp-podium-tk { font-size: 22px; font-weight: 700; font-family: 'Geist Mono', monospace; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.pp-podium-sect { font-size: 11px; color: var(--gray); margin: 2px 0 6px; }
+.pp-podium-score { font-size: 13px; font-weight: 600; font-family: 'Geist Mono', monospace; }
+.pp-podium-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 8px; }
+.pp-podium-cell { background: #fff; padding: 6px 9px; }
+.pp-podium-cell .k { font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray); }
+.pp-podium-cell .v { font-size: 14px; font-weight: 600; font-family: 'Geist Mono', monospace; }
+.pp-podium-cell .v.green { color: var(--up); } .pp-podium-cell .v.red { color: var(--down); }
+.pp-podium-empty { border: 1px dashed var(--border); border-radius: 8px; padding: 14px 16px; color: var(--gray); font-size: 13px; display: flex; align-items: center; justify-content: center; height: 100%; min-height: 170px; }
+.pp-cash-note { color: var(--gray); font-size: 13px; padding: 8px 0; }
+
+/* ---- TradingView copy block ---- */
+.pp-tvlabel { font-size: 11px; color: var(--gray); margin: 10px 0 2px; }
 
 /* ---- compact watchlist strip (dashboard footer) ---- */
 .pp-wl-strip { display: flex; gap: 8px; flex-wrap: wrap; }

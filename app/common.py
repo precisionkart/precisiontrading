@@ -403,7 +403,7 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float]) -> str:
     score_txt = f"{score:.1f}" if isinstance(score, (int, float)) and score == score else "—"
     rr_txt = f"{rr:.1f}:1" if isinstance(rr, (int, float)) and rr == rr else "—"
     src_cls = "focus" if src == "Focus" else ""
-    return (f"<div class='pp-row'>"
+    return (f"<div class='pp-row' id='pp-card-{tk}'>"
             f"<span class='tk'>{tk}</span>"
             f"<span class='px'>{px} {chg_html}</span>"
             f"<span class='spark'>{spark}</span>"
@@ -442,39 +442,52 @@ def compact_card(row: dict, detail_fn, key: str) -> None:
 
 
 def render_detail_inline(pr) -> None:
-    """Expanded card body: large daily chart with right-edge pills, the 5×2
-    criterion pill grid, a template technical-analysis line, and actions."""
+    """Expanded card body (Phase 7.7 reading order, internally scrollable):
+    1) clean daily chart (weekly via toggle) with right-edge pills,
+    2) a plain-English setup paragraph, 3) the 5×2 criterion checklist (support),
+    4) an action row (Save · TradingView · Set Alert)."""
     import dashboard_logic as dl
     import charts_plotly as cp
 
-    st.markdown(f"<div class='pp-detail-head'>{rs_badge_html(pr.rs)}"
-                f"<div><span class='tk'>{_html.escape(pr.ticker)}</span> "
-                f"<span class='sub'>{_html.escape(' · '.join(str(b) for b in [pr.sector, pr.theme, pr.pattern or pr.stage] if b))}</span>"
-                f"</div></div>", unsafe_allow_html=True)
+    with st.container(height=660, border=False):
+        # 1) chart
+        show_weekly = st.toggle("Weekly", key=f"wk_{pr.ticker}", value=False)
+        if pr.daily is not None and len(pr.daily):
+            if show_weekly:
+                wfig = cp.weekly_figure(pr.daily)
+                if wfig is not None:
+                    st.plotly_chart(wfig, use_container_width=True, key=f"wc_{pr.ticker}")
+            fig = cp.daily_figure(pr.daily, entry=pr.entry, stop=pr.stop, target=pr.target,
+                                  pattern_bars=pr.pattern_bars, reward_risk=pr.reward_risk)
+            if fig is not None:
+                st.plotly_chart(fig, use_container_width=True, key=f"dc_{pr.ticker}")
+        else:
+            st.markdown("<div class='pp-empty'>chart unavailable (OHLCV not cached)</div>",
+                        unsafe_allow_html=True)
 
-    if pr.daily is not None and len(pr.daily):
-        fig = cp.daily_figure(pr.daily, entry=pr.entry, stop=pr.stop, target=pr.target,
-                              pattern_bars=pr.pattern_bars, reward_risk=pr.reward_risk)
-        if fig is not None:
-            st.plotly_chart(fig, use_container_width=True, key=f"dc_{pr.ticker}")
-    else:
-        st.markdown("<div class='pp-empty'>chart unavailable (OHLCV not cached)</div>",
+        # 2) plain-English explanation
+        st.markdown(f"<div class='pp-explain'>{dl.setup_explanation(pr)}</div>",
                     unsafe_allow_html=True)
 
-    if pr.criteria:
-        st.markdown(pills_html(pr.criteria), unsafe_allow_html=True)
-    st.markdown(f"<div class='pp-ta'>{_html.escape(dl.technical_analysis(pr))}</div>",
-                unsafe_allow_html=True)
+        # 3) the criteria checklist (supporting role)
+        if pr.criteria:
+            st.markdown("<div class='pp-section' style='margin:10px 0 4px'>Checklist</div>",
+                        unsafe_allow_html=True)
+            st.markdown(pills_html(pr.criteria), unsafe_allow_html=True)
 
-    a1, a2 = st.columns([1, 5], vertical_alignment="center")
-    with a1:
-        if st.button("★ Save", key=f"save_{pr.ticker}"):
-            from pinpoint import store
-            store.add_to_watchlist(pr.ticker)
-            st.toast(f"{pr.ticker} added to watchlist")
-    with a2:
-        st.markdown(f"<a class='pp-tvlink' href='{tradingview_url(pr.ticker)}' "
-                    f"target='_blank'>Open in TradingView ↗</a>", unsafe_allow_html=True)
+        # 4) action row
+        a1, a2, a3 = st.columns([1.1, 1.4, 1.2], vertical_alignment="center")
+        with a1:
+            if st.button("❤ Save", key=f"save_{pr.ticker}"):
+                from pinpoint import store
+                store.add_to_watchlist(pr.ticker)
+                st.toast(f"{pr.ticker} added to watchlist")
+        with a2:
+            st.markdown(f"<a class='pp-tvlink' href='{tradingview_url(pr.ticker)}' "
+                        f"target='_blank'>📊 Open in TradingView ↗</a>", unsafe_allow_html=True)
+        with a3:
+            if st.button("🔔 Set Alert", key=f"alert_{pr.ticker}"):
+                st.toast("Alerts arrive in a later phase", icon="🔔")
 
 
 def render_treemap(rows, key: str = "treemap"):
@@ -490,6 +503,71 @@ def render_treemap(rows, key: str = "treemap"):
     st.plotly_chart(fig, use_container_width=True, key=key,
                     config={"displayModeBar": False})
     return None
+
+
+def _podium_card_html(rank: int, row: dict) -> str:
+    best = rank == 1
+    label = "<div class='pp-podium-label'>Best setup today</div>" if best else ""
+    tk = _html.escape(str(row.get("ticker")))
+    sect = _html.escape(str(row.get("sector") or ""))
+    pat = _html.escape(str(row.get("pattern") or "").split(" /")[0] or "—")
+
+    def cell(k, v, cls=""):
+        return f"<div class='pp-podium-cell'><div class='k'>{k}</div><div class='v {cls}'>{v}</div></div>"
+    e, s, t, rr = row.get("entry"), row.get("stop"), row.get("target"), row.get("reward_risk")
+    grid = ("<div class='pp-podium-grid'>"
+            + cell("Entry", f"${_fmt(e)}", "green") + cell("Stop", f"${_fmt(s)}", "red")
+            + cell("Target", f"${_fmt(t)}") + cell("R:R", f"{_fmt(rr,1)}:1") + "</div>")
+    return (f"<div class='pp-podium {'best' if best else ''}'>{label}"
+            f"<div class='pp-podium-rank'>#{rank}</div>"
+            f"<div class='pp-podium-tk'>{tk} {rs_chip_html(row.get('rs'))}</div>"
+            f"<div class='pp-podium-sect'>{sect} · {pat}</div>"
+            f"<div class='pp-podium-score'>Score {_fmt(row.get('score'), 1)}</div>"
+            f"{grid}</div>")
+
+
+def render_podium(focus_rows: list) -> None:
+    """Top-3 podium of Focus-source setups. #1 is larger + green-accented; empty
+    slots show a 'wait' card. (Caller hides the section entirely if 0 Focus.)"""
+    cols = st.columns([1.25, 1, 1], gap="small", vertical_alignment="top")
+    for i in range(3):
+        with cols[i]:
+            if i < len(focus_rows):
+                row = focus_rows[i]
+                st.markdown(_podium_card_html(i + 1, row), unsafe_allow_html=True)
+                if st.button("Open chart →", key=f"pod_open_{row['ticker']}",
+                             use_container_width=True):
+                    st.session_state.setdefault("open_cards", set()).add(row["ticker"])
+                    st.session_state["scroll_to"] = row["ticker"]
+                    st.rerun()
+            else:
+                st.markdown(f"<div class='pp-podium-empty'>No #{i + 1} setup today — wait</div>",
+                            unsafe_allow_html=True)
+
+
+def scroll_to_card() -> None:
+    """Best-effort smooth-scroll to a just-expanded Top-10 card (after Open chart →)."""
+    tk = st.session_state.pop("scroll_to", None)
+    if not tk:
+        return
+    import streamlit.components.v1 as components
+    components.html(
+        f"<script>setTimeout(function(){{var el=parent.document.getElementById('pp-card-{tk}');"
+        f"if(el) el.scrollIntoView({{behavior:'smooth',block:'center'}});}}, 250);</script>",
+        height=0)
+
+
+def tv_block(label: str, tickers: list, key: str) -> None:
+    """A 'Copy to TradingView' code block (EXCHANGE:TICKER, copy-icon built in)."""
+    import dashboard_logic as dl
+    tickers = [t for t in tickers if t]
+    if not tickers:
+        return
+    s = dl.tv_string(tickers)
+    st.markdown(f"<div class='pp-tvlabel'>{_html.escape(label)} "
+                f"({len(tickers)} tickers) — paste into a TradingView watchlist</div>",
+                unsafe_allow_html=True)
+    st.code(s, language=None)
 
 
 def watchlist_strip(graded, max_tiles: int = 5) -> None:

@@ -124,6 +124,33 @@ def test_pickresult_has_ui_criteria():
     assert rr.passed and rr.value.endswith(":1")
 
 
+def test_tv_string_format_and_fallback():
+    assert dl.tv_string(["aapl", "agx"]) == "NASDAQ:AAPL,NASDAQ:AGX"
+    assert dl.tv_string(["AGX"], exchange_map={"AGX": "NYSE"}) == "NYSE:AGX"
+    assert dl.tv_string([" ", None, "X"]) == "NASDAQ:X"
+
+
+def test_setup_explanation_a_plus():
+    from tests.test_analyzer import FakeClient, _strong_fundament, _reference_universe, _ohlcv
+    reg = regime_mod.from_fundaments(sample_data.regime_fixture())
+    a = analyzer.analyze_picks(FakeClient({"STRONG": _strong_fundament()}), ["STRONG"], reg,
+                               reference_universe=_reference_universe(),
+                               index_daily=_ohlcv("IDX"), ohlcv_provider=_ohlcv)[0]
+    txt = dl.setup_explanation(a)
+    assert "triggers on a breakout above" in txt and "reward-to-risk" in txt
+    assert "<b>" in txt                      # bold key numbers
+
+
+def test_setup_explanation_no_pattern():
+    from pinpoint.analyzer import PickResult, Criterion
+    pr = PickResult(ticker="ZZ", pattern=None, stage="Stage 1 (basing)",
+                    criteria=[Criterion("volume", "Volume Confirmation", False, "RVOL 0.5"),
+                              Criterion("valid_pattern", "Bullish Pattern", False, "none")])
+    txt = dl.setup_explanation(pr)
+    assert "no valid pattern" in txt
+    assert "falls short on" in txt and "Volume Confirmation" in txt
+
+
 def test_technical_analysis_prose():
     from tests.test_analyzer import FakeClient, _strong_fundament, _reference_universe, _ohlcv
     reg = regime_mod.from_fundaments(sample_data.regime_fixture())

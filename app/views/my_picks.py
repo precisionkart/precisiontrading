@@ -88,4 +88,9 @@ if results:
             store.add_to_watchlist(pr.ticker)
             st.toast(f"{pr.ticker} added to watchlist")
 
+    st.markdown("<div class='pp-section'>Copy to TradingView</div>", unsafe_allow_html=True)
+    actionable = [r.ticker for r in results if r.classification in ("A+", "near")]
+    c.tv_block("Actionable (A+ / near)", actionable, key="tv_mp_act")
+    c.tv_block("All graded", [r.ticker for r in results], key="tv_mp_all")
+
 c.disclaimer_footer()

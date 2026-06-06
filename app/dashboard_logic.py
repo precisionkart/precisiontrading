@@ -243,3 +243,71 @@ def _passed(pr, key: str) -> bool:
         if c.key == key:
             return c.passed
     return False
+
+
+# ---------------------------------------------------------------------------
+# Plain-English setup explanation (Phase 7.7) — one readable paragraph, bold
+# numbers, no jargon (the pills cover the criteria).
+# ---------------------------------------------------------------------------
+def setup_explanation(pr) -> str:
+    """A single reading-friendly paragraph (HTML with <b> on key numbers)."""
+    tk = _html_b(pr.ticker)
+    theme = _theme_name(pr.theme) if pr.theme else None
+    theme_tail = ""
+    if theme and pr.theme_rank is not None:
+        n = 10
+        if _passed(pr, "hot_theme"):
+            theme_tail = (f" The {theme} sector is hot today "
+                          f"(<b>#{pr.theme_rank} of {n}</b>), adding tailwind.")
+        else:
+            theme_tail = (f" The {theme} sector is mid-pack today "
+                          f"(#{pr.theme_rank} of {n}), so there's no strong tailwind.")
+
+    if pr.entry and pr.reward_risk and pr.pattern:
+        patt = pr.pattern.split(" /")[0].lower()
+        weeks = max(1, round((pr.pattern_bars or 30) / 5))
+        risk_pct = ((pr.entry - pr.stop) / pr.entry * 100.0) if pr.stop else float("nan")
+        risk_txt = f" (a <b>{risk_pct:.1f}% risk</b>)" if risk_pct == risk_pct else ""
+        return (f"{tk} is forming a <b>{patt}</b> that's been tightening for about "
+                f"<b>{weeks} weeks</b>. The setup triggers on a breakout above "
+                f"<b>${pr.entry:,.2f}</b> on confirming volume. Stop sits below the recent "
+                f"low at <b>${pr.stop:,.2f}</b>{risk_txt}. First target is "
+                f"<b>${pr.target:,.2f}</b> — a <b>{pr.reward_risk:.1f}:1</b> reward-to-risk "
+                f"ratio based on the prior advance.{theme_tail}")
+
+    # no actionable trigger yet
+    fails = [c.label for c in getattr(pr, "criteria", []) if not c.passed]
+    stage = (pr.stage or "").replace(" (advancing)", "")
+    if pr.pattern is None:
+        base = (f"{tk} is {('a ' + stage + ' name') if stage else 'on the radar'} but isn't "
+                f"in an actionable setup yet — no valid pattern has formed.")
+    else:
+        base = (f"{tk} shows a <b>{pr.pattern.split(' /')[0].lower()}</b>, but the "
+                f"reward-to-risk isn't there yet at current prices.")
+    if fails:
+        base += f" It currently falls short on: <b>{', '.join(fails[:3])}</b>."
+    return base + theme_tail
+
+
+def _html_b(s) -> str:
+    return f"<b>{s}</b>"
+
+
+# ---------------------------------------------------------------------------
+# TradingView watchlist import string (Phase 7.7).
+# ---------------------------------------------------------------------------
+def tv_string(tickers, exchange_map: Optional[dict] = None,
+              default_exchange: str = "NASDAQ") -> str:
+    """EXCHANGE:TICKER comma list for pasting into a TradingView watchlist.
+    Exchange is looked up in `exchange_map` (we don't capture exchange from
+    Finviz, so it falls back to NASDAQ — TradingView resolves most either way)."""
+    exchange_map = exchange_map or {}
+    out = []
+    for t in tickers:
+        if t is None:
+            continue
+        t = str(t).strip().upper()
+        if not t or t == "NONE":
+            continue
+        out.append(f"{exchange_map.get(t, default_exchange)}:{t}")
+    return ",".join(out)

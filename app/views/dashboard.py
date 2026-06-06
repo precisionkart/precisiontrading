@@ -35,6 +35,24 @@ if sector_filter:
 st.markdown(f"<div class='pp-sub'>{sub}</div>", unsafe_allow_html=True)
 c.warning_banner(scan.get("warnings"))
 
+# ---- Top 3 Podium (Focus-source only; hidden entirely when 0 Focus) ----
+focus = scan.get("focus")
+focus_rows = []
+if focus is not None and len(focus):
+    f = focus.sort_values("pinpoint_score", ascending=False)
+    for _, r in f.head(3).iterrows():
+        focus_rows.append({"ticker": r.get("ticker"), "sector": r.get("sector"),
+                           "score": r.get("pinpoint_score"), "rs": r.get("rs"),
+                           "pattern": r.get("pattern"), "entry": r.get("entry_trigger"),
+                           "stop": r.get("stop"), "target": r.get("measured_target"),
+                           "reward_risk": r.get("reward_risk")})
+if focus_rows:
+    st.markdown("<div class='pp-section'>Top 3 — best setups today</div>", unsafe_allow_html=True)
+    c.render_podium(focus_rows)
+else:
+    st.markdown("<div class='pp-cash-note'>No Pinpoint A+ setups today — sitting in cash "
+                "is a position.</div>", unsafe_allow_html=True)
+
 
 def detail_fn(tk: str):
     cache = st.session_state.setdefault("detail_cache", {})
@@ -56,6 +74,7 @@ if len(top10) == 0:
     st.markdown("<div class='pp-empty'>No ranked names.</div>", unsafe_allow_html=True)
 for i, (_, row) in enumerate(top10.iterrows()):
     c.compact_card(row.to_dict(), detail_fn, key=f"card{i}")
+c.scroll_to_card()   # smooth-scroll to a card opened from the podium
 
 # ---- Sector treemap ----
 st.markdown("<div class='pp-section'>Sector Heatmap</div>", unsafe_allow_html=True)
@@ -97,22 +116,5 @@ else:
     st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
                 + "".join(rows_html) + "</div>", unsafe_allow_html=True)
 
-# ---- Compact watchlist strip ----
-st.markdown("<div class='pp-section'>Watchlist · at a glance</div>", unsafe_allow_html=True)
-wl = store.load_watchlist()
-if not wl:
-    st.markdown("<div class='pp-empty'>No saved names yet — ★ Save from any card.</div>",
-                unsafe_allow_html=True)
-else:
-    key = f"wlstrip::{','.join(wl)}::{'c' if CLOUD else 'l'}"
-    if st.session_state.get("wlstrip_key") != key:
-        ref, _ = c.reference_universe()
-        with st.spinner("Grading watchlist…"):
-            st.session_state["wlstrip"] = analyzer.analyze_picks(
-                None if CLOUD else c.get_client(), wl, scan["regime"],
-                reference_universe=ref, theme_ctx=theme_ctx,
-                offline_universe=ref if CLOUD else None, cache_only=CLOUD)
-        st.session_state["wlstrip_key"] = key
-    c.watchlist_strip(st.session_state.get("wlstrip", []))
-
+# (Dashboard ends at Earnings — the watchlist lives on its own sidebar page.)
 c.disclaimer_footer()
