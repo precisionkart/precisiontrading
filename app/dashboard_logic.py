@@ -14,12 +14,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-# RS tier -> (background, text) colors (spec Phase 7.5 point 5).
+# RS tier -> (background, text) colors (Phase 7.6 fluoro).
 RS_TIERS = [
-    (90, "#16A34A", "#FFFFFF"),
-    (80, "#F59E0B", "#FFFFFF"),
-    (70, "#737373", "#FFFFFF"),
-    (0, "#D4D4D8", "#0A0A0A"),
+    (90, "#00D964", "#062B16"),     # fluoro green, dark text
+    (80, "#FFB800", "#3D2C00"),     # amber, dark text
+    (70, "#6B7280", "#FFFFFF"),     # gray, white text
+    (0, "#D4D4D8", "#0A0A0A"),      # light gray, dark text
 ]
 
 
@@ -38,9 +38,10 @@ def pill_kind(passed: bool) -> str:
     return "pass" if passed else "fail"
 
 
+# fluoro pill colors (light-mode backgrounds)
 PILL_COLORS = {
-    "pass": {"bg": "#DCFCE7", "border": "#16A34A", "fg": "#14532D"},
-    "fail": {"bg": "#FEE2E2", "border": "#DC2626", "fg": "#7F1D1D"},
+    "pass": {"bg": "#E6FFF1", "border": "#00D964", "fg": "#046A38"},
+    "fail": {"bg": "#FFE6EC", "border": "#FF3366", "fg": "#7F0820"},
 }
 
 
@@ -130,6 +131,69 @@ def delta_str(delta: Optional[float]) -> str:
         return "—"
     arrow = "▲" if delta > 0 else ("▼" if delta < 0 else "•")
     return f"{arrow} {abs(delta):.1f}"
+
+
+# ---------------------------------------------------------------------------
+# Mini sparkline (inline SVG, no chart engine) for the compact card row.
+# ---------------------------------------------------------------------------
+def sparkline_svg(closes, width: int = 72, height: int = 22, days: int = 60) -> str:
+    """A tiny inline-SVG sparkline of the last `days` closes. Fluoro green if the
+    window is up, fluoro red if down. Returns '' if there's too little data."""
+    try:
+        vals = [float(v) for v in list(closes)[-days:] if v == v]
+    except (TypeError, ValueError):
+        return ""
+    if len(vals) < 3:
+        return ""
+    lo, hi = min(vals), max(vals)
+    rng = (hi - lo) or 1.0
+    n = len(vals)
+    pad = 1.5
+    color = "#00D964" if vals[-1] >= vals[0] else "#FF3366"
+    pts = []
+    for i, v in enumerate(vals):
+        x = pad + (width - 2 * pad) * (i / (n - 1))
+        y = pad + (height - 2 * pad) * (1.0 - (v - lo) / rng)
+        pts.append(f"{x:.1f},{y:.1f}")
+    poly = " ".join(pts)
+    return (f"<svg width='{width}' height='{height}' viewBox='0 0 {width} {height}' "
+            f"fill='none' xmlns='http://www.w3.org/2000/svg'>"
+            f"<polyline points='{poly}' stroke='{color}' stroke-width='1.4' "
+            f"fill='none' stroke-linejoin='round' stroke-linecap='round'/></svg>")
+
+
+# ---------------------------------------------------------------------------
+# Sector treemap data (area = rank weight, color = RS score, hover detail).
+# ---------------------------------------------------------------------------
+def treemap_data(themes: list, top10: Optional[pd.DataFrame] = None,
+                 prior_scores: Optional[dict] = None, hot_frac: float = 0.30) -> list[dict]:
+    """Rows for the sector treemap: label, value (rank-based size), score (color),
+    delta vs prior, hot flag, and the top-3 Top-10 stocks in that sector."""
+    if not themes:
+        return []
+    prior_scores = prior_scores or {}
+    n = len(themes)
+    import math
+    hot_cut = max(1, math.ceil(hot_frac * n))
+    # top stocks per sector from the Top-10 table
+    by_sector: dict[str, list[str]] = {}
+    if top10 is not None and len(top10) and "Sector" in top10.columns:
+        for _, r in top10.iterrows():
+            by_sector.setdefault(str(r["Sector"]), []).append(str(r["Ticker"]))
+    out = []
+    for t in themes:
+        name = t.get("theme")
+        score = t.get("score")
+        rank = t.get("rank")
+        prev = prior_scores.get(name)
+        delta = (score - prev) if (prev is not None and score is not None) else None
+        out.append({
+            "label": name, "score": score, "rank": rank,
+            "value": float(n - rank + 1) if rank else 1.0,      # #1 biggest
+            "delta": delta, "hot": bool(rank is not None and rank <= hot_cut),
+            "top3": ", ".join(by_sector.get(name, [])[:3]) or "—",
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------

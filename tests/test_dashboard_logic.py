@@ -13,21 +13,44 @@ from pinpoint import sample_data, analyzer  # noqa: E402
 from pinpoint import regime as regime_mod  # noqa: E402
 
 
-# --- RS tier mapping -------------------------------------------------------
+# --- RS tier mapping (Phase 7.6 fluoro) ------------------------------------
 def test_rs_tier_thresholds():
-    assert dl.rs_tier(95) == ("#16A34A", "#FFFFFF")    # 90-99 green
-    assert dl.rs_tier(85) == ("#F59E0B", "#FFFFFF")    # 80-89 amber
-    assert dl.rs_tier(75) == ("#737373", "#FFFFFF")    # 70-79 gray
-    assert dl.rs_tier(40) == ("#D4D4D8", "#0A0A0A")    # <70 light
-    assert dl.rs_tier(float("nan")) == ("#D4D4D8", "#0A0A0A")
+    assert dl.rs_tier(95)[0] == "#00D964"              # 90-99 fluoro green
+    assert dl.rs_tier(85)[0] == "#FFB800"              # 80-89 amber
+    assert dl.rs_tier(75)[0] == "#6B7280"              # 70-79 gray
+    assert dl.rs_tier(40)[0] == "#D4D4D8"              # <70 light
+    assert dl.rs_tier(float("nan"))[0] == "#D4D4D8"
 
 
-# --- pill pass/fail color ---------------------------------------------------
+# --- pill pass/fail color (fluoro) ------------------------------------------
 def test_pill_kind():
     assert dl.pill_kind(True) == "pass"
     assert dl.pill_kind(False) == "fail"
-    assert dl.PILL_COLORS["pass"]["border"] == "#16A34A"
-    assert dl.PILL_COLORS["fail"]["border"] == "#DC2626"
+    assert dl.PILL_COLORS["pass"]["border"] == "#00D964"
+    assert dl.PILL_COLORS["fail"]["border"] == "#FF3366"
+
+
+# --- sparkline + treemap data ----------------------------------------------
+def test_sparkline_svg_up_down():
+    up = dl.sparkline_svg([1, 2, 3, 4, 5])
+    assert up.startswith("<svg") and "#00D964" in up
+    down = dl.sparkline_svg([5, 4, 3, 2, 1])
+    assert "#FF3366" in down
+    assert dl.sparkline_svg([1]) == ""        # too little data
+
+
+def test_treemap_data_sizing_and_top3():
+    themes = [{"theme": "Semis", "rank": 1, "score": 60.0},
+              {"theme": "Energy", "rank": 2, "score": 10.0},
+              {"theme": "Healthcare", "rank": 3, "score": -5.0}]
+    top10 = pd.DataFrame([{"Ticker": "NVDA", "Sector": "Semis"},
+                          {"Ticker": "AMD", "Sector": "Semis"}])
+    rows = dl.treemap_data(themes, top10, prior_scores={"Semis": 50.0})
+    semis = next(r for r in rows if r["label"] == "Semis")
+    assert semis["value"] == 3.0              # rank 1 of 3 -> biggest (n-rank+1)
+    assert semis["delta"] == 10.0             # 60 - 50
+    assert semis["hot"] is True
+    assert "NVDA" in semis["top3"]
 
 
 # --- Top 10 builder + sector filter ----------------------------------------

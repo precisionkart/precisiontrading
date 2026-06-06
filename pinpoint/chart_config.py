@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-# --- palette (product brief) ----------------------------------------------
+# --- REPORT palette (mplfinance / HTML report — DO NOT change; report stays
+# byte-stable). The dashboard uses the FLUORO palette below. -----------------
 WHITE = "#FFFFFF"
 GRID = "#F3F4F6"
 UP = "#16A34A"
@@ -28,6 +29,20 @@ MA_COLORS: dict[str, str] = {
     "EMA20": "#F59E0B",    # amber — the signal
     "SMA50": "#737373",    # gray — intermediate
     "SMA200": "#0A0A0A",   # near-black — macro anchor
+}
+
+# --- FLUORO palette (Phase 7.6 — interactive dashboard only) ----------------
+# Brighter/more saturated; the report keeps the muted palette above.
+FLUORO_UP = "#00D964"
+FLUORO_DOWN = "#FF3366"
+FLUORO_NEUTRAL = "#6B7280"
+# MA palette punched ~15% in saturation for the dashboard.
+MA_COLORS_FLUORO: dict[str, str] = {
+    "EMA5": "#9B6BFF",     # purple
+    "EMA10": "#2563FF",    # blue
+    "EMA20": "#FFAA00",    # amber
+    "SMA50": "#6B7280",    # gray
+    "SMA200": "#0A0A0A",   # near-black anchor
 }
 EMA_SPANS = (5, 10, 20)
 SMA_SPANS = (50, 200)
