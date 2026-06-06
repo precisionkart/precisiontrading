@@ -219,9 +219,14 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
         return pd.DataFrame()
 
     df = universe.copy()
-    perf = df[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
-               if c in df.columns]]
-    df["rs"] = compute_rs(perf)
+    # Use a precomputed broad-universe RS if the caller supplied one (the RS-
+    # universe consistency fix — Targets RS must be a percentile vs the broad
+    # ~580-name universe, not the gated subset). Otherwise compute over `universe`
+    # (offline selftest / tests).
+    if "rs" not in df.columns or df["rs"].isna().all():
+        perf = df[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
+                   if c in df.columns]]
+        df["rs"] = compute_rs(perf)
 
     rows = []
     for _, row in df.iterrows():
@@ -553,10 +558,44 @@ def fetch_targets_universe(client, regime: Regime, min_growth: bool = False,
         return UniverseResult(df=pd.DataFrame(), universe=pd.DataFrame(),
                               warnings=list(result.warnings), ok=False)
     universe = normalize_universe(result.df)
+    warnings = list(result.warnings)
+
+    # RS-universe consistency: rank RS against the BROAD reference universe (the
+    # same one My-Picks and cloud publish use), not the gated subset — so a
+    # ticker's RS matches across local and cloud.
+    universe = _inject_broad_rs(client, universe, warnings)
+
     targets = build_targets(universe, regime, raw_df=result.df, theme_ctx=theme_ctx,
                             ipo_ctx=ipo_ctx, ignore_rvol=ignore_rvol)
-    return UniverseResult(df=targets, universe=universe,
-                          warnings=list(result.warnings), ok=result.ok)
+    return UniverseResult(df=targets, universe=universe, warnings=warnings, ok=result.ok)
+
+
+_PERF_COLS = ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
+
+
+def _inject_broad_rs(client, universe: pd.DataFrame, warnings: list) -> pd.DataFrame:
+    """Compute each universe name's RS as a percentile across the BROAD reference
+    universe (RS_REFERENCE_SCREEN) and set it on `universe['rs']`. Degrades to the
+    local computation if the broad pull fails."""
+    try:
+        ref = client.fetch_universe(RS_REFERENCE_SCREEN, views=("performance",))
+        warnings.extend(ref.warnings)
+        if ref.empty:
+            return universe
+        broad = normalize_universe(ref.df)
+        cols = [c for c in _PERF_COLS if c in broad.columns and c in universe.columns]
+        if not cols:
+            return universe
+        combined = pd.concat([broad[["ticker"] + cols], universe[["ticker"] + cols]],
+                             ignore_index=True).drop_duplicates("ticker", keep="first")
+        combined["rs"] = compute_rs(combined[cols])
+        rs_by_ticker = dict(zip(combined["ticker"], combined["rs"]))
+        universe = universe.copy()
+        universe["rs"] = universe["ticker"].map(rs_by_ticker)
+        return universe
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"broad RS reference fetch failed ({exc}); using local RS.")
+        return universe
 
 
 def run_targets(client, regime: Regime, limit: int | None = None,

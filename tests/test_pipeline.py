@@ -82,3 +82,27 @@ def test_evaluate_gates_ignore_rvol():
 
 def test_build_earnings_empty_input():
     assert len(pipeline.build_earnings(pd.DataFrame())) == 0
+
+
+def test_build_targets_uses_precomputed_broad_rs():
+    """RS-universe consistency: when an 'rs' column is supplied (the broad-
+    reference percentile), build_targets uses it instead of recomputing over the
+    gated subset."""
+    reg = regime_mod.from_fundaments(sample_data.regime_fixture())
+    base = dict(company="C", sector="Technology", industry="Software", price=50.0,
+                avg_volume=1_000_000, rel_volume=3.0, beta=1.5, pct_below_high=2.0,
+                sma20_pct=3.0, sma50_pct=9.0, sma200_pct=22.0,
+                eps_this_y=50.0, eps_past5y=30.0, sales_past5y=30.0, perf_week=1.0)
+    # distinct performance so the local percentile makes the top name RS 99
+    rows = [dict(base, ticker="AAA", perf_quarter=60.0, perf_half=120.0, perf_year=240.0, perf_month=20.0),
+            dict(base, ticker="BBB", perf_quarter=20.0, perf_half=40.0, perf_year=80.0, perf_month=8.0),
+            dict(base, ticker="CCC", perf_quarter=5.0, perf_half=10.0, perf_year=20.0, perf_month=2.0)]
+    uni = pd.DataFrame(rows)
+
+    # Broad RS says these are all mid-pack (40) -> none clear the RS>90 gate.
+    uni_broad = uni.copy()
+    uni_broad["rs"] = 40.0
+    assert len(pipeline.build_targets(uni_broad, reg, save_snapshot=False)) == 0
+
+    # Without a supplied RS, the local percentile makes the top name 99 -> passes.
+    assert len(pipeline.build_targets(uni, reg, save_snapshot=False)) >= 1
