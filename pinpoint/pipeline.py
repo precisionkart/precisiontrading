@@ -185,6 +185,7 @@ def snapshot_layers(row: pd.Series, regime: Regime, rs: float,
         "beach_ball": False,               # overlaid by enrich_focus
         "volume_confirmation": bool(row.get("rel_volume", 0) > g.min_rel_volume),
         "reward_risk": False,              # overlaid by enrich_focus (entries.py)
+        "earnings_flag": False,            # overlaid by enrich_focus (earnings_watch)
         # prerequisites (default true; set False by later modules):
         "chart_ok": True,
         "not_earnings_gap_down": True,

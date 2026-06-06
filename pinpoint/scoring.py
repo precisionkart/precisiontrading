@@ -34,6 +34,7 @@ LAYER_NAMES: tuple[str, ...] = (
     "beach_ball",
     "volume_confirmation",
     "reward_risk",
+    "earnings_flag",
 )
 
 # Human-readable labels for output.
@@ -52,6 +53,7 @@ LAYER_LABELS: dict[str, str] = {
     "beach_ball": "Beach-ball relative strength",
     "volume_confirmation": "Volume confirmation (RVOL>2 / surge)",
     "reward_risk": "R:R >= 5:1",
+    "earnings_flag": "Earnings flag breakout (highest-edge)",
 }
 
 # Prerequisites (3.9): if any is explicitly False the setup is disqualified.

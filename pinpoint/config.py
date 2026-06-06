@@ -114,6 +114,10 @@ class LayerWeights:
     beach_ball: float = 2.0                # 12. beach-ball rel. strength (heavy)
     volume_confirmation: float = 1.0       # 13. RVOL>2 / breakout surge
     reward_risk: float = 1.0               # 14. R:R >= 5:1
+    # 15. EARNINGS FLAG (3.6 ⭐) — the spec's highest-edge setup: a tracked
+    # earnings gap-up now breaking out of its flag. Dominant weight (Phase 10
+    # will rescale this to +25 on the 0-100 scale).
+    earnings_flag: float = 4.0
 
     def as_dict(self) -> dict[str, float]:
         return {
@@ -131,6 +135,7 @@ class LayerWeights:
             "beach_ball": self.beach_ball,
             "volume_confirmation": self.volume_confirmation,
             "reward_risk": self.reward_risk,
+            "earnings_flag": self.earnings_flag,
         }
 
 
