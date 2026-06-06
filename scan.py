@@ -209,7 +209,8 @@ def run_live(args) -> int:
         # Fetch the universe ONCE and reuse it for both lists.
         uni = pipeline.fetch_targets_universe(client, reg, min_growth=args.min_growth,
                                               theme_ctx=theme_ctx, ipo_ctx=ipo_ctx,
-                                              ignore_rvol=args.ignore_rvol)
+                                              ignore_rvol=args.ignore_rvol,
+                                              no_industry_gate=args.no_industry_gate)
         any_403 = any_403 or _has_block(uni.warnings)
         targets = uni.df
         if want_targets:
@@ -442,6 +443,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="write data/latest_scan.json + snapshot + OHLCV cache (cloud)")
     parser.add_argument("--cache-top", type=int, default=250,
                         help="pre-cache OHLCV for the top-N broad names on --publish")
+    parser.add_argument("--no-industry-gate", action="store_true",
+                        help="bypass the top-10%% industry-RS gate (diagnostic)")
     parser.add_argument("--ignore-rvol", action="store_true",
                         help="drop the relative-volume gate (weekend/evening prep runs)")
     parser.add_argument("--no-csv", action="store_true", help="skip CSV output (Phase 4)")

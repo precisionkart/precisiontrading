@@ -106,3 +106,26 @@ def test_build_targets_uses_precomputed_broad_rs():
 
     # Without a supplied RS, the local percentile makes the top name 99 -> passes.
     assert len(pipeline.build_targets(uni, reg, save_snapshot=False)) >= 1
+
+
+def test_build_targets_industry_gate():
+    """Industry-RS gate: a name in a non-top-10% industry is dropped (unless
+    --no-industry-gate)."""
+    from pinpoint.themes import ThemeContext
+    reg = regime_mod.from_fundaments(sample_data.regime_fixture())
+    base = dict(company="C", sector="Technology", price=50.0, avg_volume=1_000_000,
+                rel_volume=3.0, beta=1.5, pct_below_high=2.0, sma20_pct=3.0,
+                sma50_pct=9.0, sma200_pct=22.0, eps_this_y=50.0, eps_past5y=30.0,
+                sales_past5y=30.0, rs=95.0,
+                perf_week=1.0, perf_month=8.0, perf_quarter=20.0, perf_half=40.0, perf_year=80.0)
+    uni = pd.DataFrame([dict(base, ticker="HOT", industry="Software"),
+                        dict(base, ticker="COLD", industry="Coal")])
+    ctx = ThemeContext(theme_rank={}, n_themes=0,
+                       industry_rank={"Software": {"pct": 0.99, "rank": 1, "score": 40.0},
+                                      "Coal": {"pct": 0.20, "rank": 120, "score": 1.0}})
+
+    gated = pipeline.build_targets(uni, reg, save_snapshot=False, theme_ctx=ctx)
+    assert set(gated["ticker"]) == {"HOT"}          # Coal industry gated out
+    ungated = pipeline.build_targets(uni, reg, save_snapshot=False, theme_ctx=ctx,
+                                     no_industry_gate=True)
+    assert set(ungated["ticker"]) == {"HOT", "COLD"}

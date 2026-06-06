@@ -201,7 +201,8 @@ def snapshot_layers(row: pd.Series, regime: Regime, rs: float,
 def build_targets(universe: pd.DataFrame, regime: Regime,
                   raw_df: pd.DataFrame | None = None,
                   save_snapshot: bool = True, theme_ctx=None,
-                  ipo_ctx=None, ignore_rvol: bool = False) -> pd.DataFrame:
+                  ipo_ctx=None, ignore_rvol: bool = False,
+                  no_industry_gate: bool = False) -> pd.DataFrame:
     """Return ranked Targets (3.3-3.5). `universe` is a normalized frame.
 
     Before any filtering, the RAW merged Finviz frame (`raw_df` if provided,
@@ -234,6 +235,13 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
         rs = row["rs"]
         rs_ok = (rs == rs) and (rs >= CONFIG.gates.min_rs_rating)
         if not (gates.passed and rs_ok):
+            continue
+        # Industry-RS gate (3.3): industry must be in the top 10% of groups.
+        # Only enforced when we actually have industry ranks (live/publish); the
+        # cloud path reads already-gated published targets.
+        if (theme_ctx is not None and getattr(theme_ctx, "industry_rank", None)
+                and not no_industry_gate
+                and not theme_ctx.is_top_industry(row.get("industry"))):
             continue
         layers = snapshot_layers(row, regime, rs, theme_ctx=theme_ctx, ipo_ctx=ipo_ctx)
         result = score_layers(layers)
@@ -543,7 +551,8 @@ class UniverseResult:
 
 def fetch_targets_universe(client, regime: Regime, min_growth: bool = False,
                            theme_ctx=None, ipo_ctx=None,
-                           ignore_rvol: bool = False) -> UniverseResult:
+                           ignore_rvol: bool = False,
+                           no_industry_gate: bool = False) -> UniverseResult:
     """Fetch the universe once, snapshot it, and build ranked Targets. Returns
     both Targets and the normalized universe for downstream Focus enrichment
     (avoids re-fetching Finviz for --all). `ignore_rvol` drops the relative-
@@ -566,7 +575,8 @@ def fetch_targets_universe(client, regime: Regime, min_growth: bool = False,
     universe = _inject_broad_rs(client, universe, warnings)
 
     targets = build_targets(universe, regime, raw_df=result.df, theme_ctx=theme_ctx,
-                            ipo_ctx=ipo_ctx, ignore_rvol=ignore_rvol)
+                            ipo_ctx=ipo_ctx, ignore_rvol=ignore_rvol,
+                            no_industry_gate=no_industry_gate)
     return UniverseResult(df=targets, universe=universe, warnings=warnings, ok=result.ok)
 
 
