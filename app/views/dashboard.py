@@ -37,15 +37,20 @@ c.warning_banner(scan.get("warnings"))
 
 # ---- Top 3 Podium (Focus-source only; hidden entirely when 0 Focus) ----
 focus = scan.get("focus")
+ef_tickers = set()
+if focus is not None and len(focus) and "earnings_flag_active" in focus.columns:
+    ef_tickers = set(focus[focus["earnings_flag_active"] == True]["ticker"].astype(str))  # noqa: E712
 focus_rows = []
 if focus is not None and len(focus):
-    f = focus.sort_values("pinpoint_score", ascending=False)
+    f = focus.sort_values(["earnings_flag_active", "pinpoint_score"], ascending=False) \
+        if "earnings_flag_active" in focus.columns else focus.sort_values("pinpoint_score", ascending=False)
     for _, r in f.head(3).iterrows():
         focus_rows.append({"ticker": r.get("ticker"), "sector": r.get("sector"),
                            "score": r.get("pinpoint_score"), "rs": r.get("rs"),
                            "pattern": r.get("pattern"), "entry": r.get("entry_trigger"),
                            "stop": r.get("stop"), "target": r.get("measured_target"),
-                           "reward_risk": r.get("reward_risk")})
+                           "reward_risk": r.get("reward_risk"),
+                           "earnings_flag": str(r.get("ticker")) in ef_tickers})
 if focus_rows:
     st.markdown("<div class='pp-section'>Top 3 — best setups today</div>", unsafe_allow_html=True)
     c.render_podium(focus_rows)
@@ -73,7 +78,8 @@ st.markdown("<div class='pp-section'>Top 10 — Focus + Watch</div>", unsafe_all
 if len(top10) == 0:
     st.markdown("<div class='pp-empty'>No ranked names.</div>", unsafe_allow_html=True)
 for i, (_, row) in enumerate(top10.iterrows()):
-    c.compact_card(row.to_dict(), detail_fn, key=f"card{i}")
+    c.compact_card(row.to_dict(), detail_fn, key=f"card{i}",
+                   ef=str(row.get("Ticker")) in ef_tickers)
 c.scroll_to_card()   # smooth-scroll to a card opened from the podium
 
 # ---- Sector treemap ----

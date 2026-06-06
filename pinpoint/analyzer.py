@@ -92,6 +92,11 @@ class PickResult:
     continuity_score: float = float("nan")
     theme_rank: Optional[int] = None
     theme_score: Optional[float] = None
+    # Phase 9 earnings-flag connector.
+    earnings_flag_active: bool = False
+    earnings_flag_ema_zone: Optional[str] = None
+    gap_date: Optional[str] = None
+    gap_pct: Optional[float] = None
 
     @property
     def is_pinpoint(self) -> bool:
@@ -121,7 +126,8 @@ def analyze_picks(client, tickers: list[str], regime,
                   index_daily: Optional[pd.DataFrame] = None,
                   ohlcv_provider=None,
                   offline_universe: Optional[pd.DataFrame] = None,
-                  cache_only: bool = False) -> list[PickResult]:
+                  cache_only: bool = False,
+                  earnings_ctx=None) -> list[PickResult]:
     """Grade each ticker; return PickResults sorted A+ -> near -> fail.
 
     `offline_universe` (read-only cloud mode): source each ticker's normalized
@@ -168,11 +174,15 @@ def analyze_picks(client, tickers: list[str], regime,
         for i, t in enumerate(rows):
             rows[t]["rs"] = rs_vals[i]
 
+    if earnings_ctx is None:
+        from . import earnings_watch as ew
+        earnings_ctx = ew.active_ctx()
+
     results: list[PickResult] = []
     g = CONFIG.gates
     for t, row in rows.items():
         results.append(_grade_one(t, row, regime, theme_ctx, ipo_ctx,
-                                  ohlcv_provider, index_close, g))
+                                  ohlcv_provider, index_close, g, earnings_ctx))
     for t in unavailable:
         results.append(PickResult(
             ticker=t, classification="unavailable",
@@ -193,7 +203,8 @@ def _clean_str(x):
     return str(x)
 
 
-def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_close, g) -> PickResult:
+def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_close, g,
+               earnings_ctx=None) -> PickResult:
     rs = float(row.get("rs", np.nan))
     sector = _clean_str(row.get("sector"))
     industry = _clean_str(row.get("industry"))
@@ -245,6 +256,13 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
     else:
         classification = "fail"
 
+    # ---- earnings flag (Phase 9 ⭐) ----
+    ew_entry = (earnings_ctx or {}).get(ticker)
+    ef = {"detected": False, "ema_zone": None}
+    if ew_entry and ew_entry.get("initial_post_gap_high") and have_ohlcv:
+        ef = patterns_mod.detect_earnings_flag(
+            daily_raw, ew_entry.get("gap_date"), ew_entry["initial_post_gap_high"])
+
     # ---- score (computed for every name, qualifier or not) ----
     base_layers = pipeline.snapshot_layers(row, regime, rs, theme_ctx=theme_ctx, ipo_ctx=ipo_ctx)
     if have_ohlcv:
@@ -261,6 +279,7 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
             "timeframe_continuity": cont.aligned,
             "beach_ball": bb,
             "reward_risk": bool(rr is not None and rr >= CONFIG.entry.min_reward_risk),
+            "earnings_flag": bool(ef["detected"]),
         })
     result = score_layers(base_layers)
 
@@ -319,6 +338,10 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         growth_summary=growth.summary(), continuity_score=cont_score,
         theme_rank=(trec["rank"] if trec else None),
         theme_score=(trec["score"] if trec else None),
+        earnings_flag_active=bool(ef["detected"]),
+        earnings_flag_ema_zone=ef.get("ema_zone"),
+        gap_date=(ew_entry.get("gap_date") if ew_entry else None),
+        gap_pct=(ew_entry.get("gap_pct") if ew_entry else None),
     )
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr

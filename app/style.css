@@ -64,6 +64,10 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-row .src { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; color: var(--gray); }
 .pp-row .src.focus { color: var(--up); border-color: var(--up); }
+.pp-ef { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700;
+  color: #04210F; background: var(--up); border-radius: 999px; padding: 2px 8px;
+  letter-spacing: 0.02em; }
+.pp-podium-ef { margin-top: 6px; }
 
 /* RS badge (small inline + large detail) */
 .pp-rs { display: inline-flex; align-items: center; justify-content: center; min-width: 30px;

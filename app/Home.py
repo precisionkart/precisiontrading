@@ -36,15 +36,19 @@ dashboard = st.Page("views/dashboard.py", title="Dashboard",
                     icon=":material/space_dashboard:", default=True)
 mypicks = st.Page("views/my_picks.py", title="My Picks", icon=":material/insights:")
 fullscan = st.Page("views/full_scan.py", title="Full Scan", icon=":material/search:")
+earnings = st.Page("views/earnings_watch_page.py", title="Earnings Watch",
+                   icon=":material/trending_up:")
 watchlist = st.Page("views/watchlist.py", title="Watchlist", icon=":material/star:")
 settings = st.Page("views/settings.py", title="Settings", icon=":material/settings:")
-nav = st.navigation([dashboard, mypicks, fullscan, watchlist, settings], position="hidden")
+nav = st.navigation([dashboard, mypicks, fullscan, earnings, watchlist, settings],
+                    position="hidden")
 
 with st.sidebar:
     c.sidebar_logo()
     st.page_link(dashboard)
     st.page_link(mypicks)
     st.page_link(fullscan)
+    st.page_link(earnings)
     st.page_link(watchlist)
     st.page_link(settings)
     c.sidebar_footer(scan, CLOUD)

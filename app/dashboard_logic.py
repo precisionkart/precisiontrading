@@ -287,6 +287,18 @@ def _passed(pr, key: str) -> bool:
 def setup_explanation(pr) -> str:
     """A single reading-friendly paragraph (HTML with <b> on key numbers)."""
     tk = _html_b(pr.ticker)
+
+    # Earnings flag is the headline when active (the spec's highest-edge setup).
+    if getattr(pr, "earnings_flag_active", False):
+        zone = getattr(pr, "earnings_flag_ema_zone", None)
+        zone_txt = f" holding the <b>{zone} EMA</b>" if zone else ""
+        gap = getattr(pr, "gap_pct", None)
+        gtxt = f" <b>{gap:.1f}%</b>" if gap is not None else ""
+        gd = getattr(pr, "gap_date", None)
+        gdtxt = f" on <b>{gd}</b>" if gd else ""
+        return (f"This is an <b>EARNINGS FLAG</b> setup — {tk} gapped up{gtxt}{gdtxt}, "
+                f"consolidated{zone_txt}, and is breaking out today. Per the methodology, "
+                f"this is the highest-edge pattern in the strategy.")
     theme = _theme_name(pr.theme) if pr.theme else None
     theme_tail = ""
     if theme and pr.theme_rank is not None:

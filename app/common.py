@@ -386,7 +386,10 @@ def rs_chip_html(rs) -> str:
     return f"<span class='pp-rs' style='background:{bg};color:{fg}'>{val}</span>"
 
 
-def _row_html(row: dict, spark: str, price: float, chg: Optional[float]) -> str:
+_EF_BADGE = "<span class='pp-ef'>📈 Earnings Flag</span>"
+
+
+def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: bool = False) -> str:
     tk = _html.escape(str(row.get("Ticker", "")))
     pat = _html.escape(str(row.get("Pattern") or "—"))
     sect = _html.escape(str(row.get("Sector") or ""))
@@ -412,13 +415,15 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float]) -> str:
             f"<span class='pat'>{pat}</span>"
             f"<span class='rr'>{rr_txt}</span>"
             f"<span class='sect'>{sect}</span>"
+            f"{_EF_BADGE if ef else ''}"
             f"<span class='src {src_cls}'>{_html.escape(src)}</span>"
             f"</div>")
 
 
-def compact_card(row: dict, detail_fn, key: str) -> None:
+def compact_card(row: dict, detail_fn, key: str, ef: bool = False) -> None:
     """One-row compact stock card (ticker/price/sparkline/RS/score/pattern/R:R/
-    sector) with an inline expand to the detail view. Multiple can be open."""
+    sector) with an inline expand to the detail view. Multiple can be open.
+    `ef` shows the earnings-flag badge."""
     import dashboard_logic as dl
     tk = str(row.get("Ticker"))
     open_set = st.session_state.setdefault("open_cards", set())
@@ -431,7 +436,7 @@ def compact_card(row: dict, detail_fn, key: str) -> None:
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
     c1, c2 = st.columns([24, 1], vertical_alignment="center")
-    c1.markdown(_row_html(row, spark, price, chg), unsafe_allow_html=True)
+    c1.markdown(_row_html(row, spark, price, chg, ef=ef), unsafe_allow_html=True)
     if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
         (open_set.discard if is_open else open_set.add)(tk)
         st.rerun()
@@ -529,12 +534,13 @@ def _podium_card_html(rank: int, row: dict) -> str:
     grid = ("<div class='pp-podium-grid'>"
             + cell("Entry", f"${_fmt(e)}", "green") + cell("Stop", f"${_fmt(s)}", "red")
             + cell("Target", f"${_fmt(t)}") + cell("R:R", f"{_fmt(rr,1)}:1") + "</div>")
+    ef = f"<div class='pp-podium-ef'>{_EF_BADGE}</div>" if row.get("earnings_flag") else ""
     return (f"<div class='pp-podium {'best' if best else ''}'>{label}"
             f"<div class='pp-podium-rank'>#{rank}</div>"
             f"<div class='pp-podium-tk'>{tk} {rs_chip_html(row.get('rs'))}</div>"
             f"<div class='pp-podium-sect'>{sect} · {pat}</div>"
             f"<div class='pp-podium-score'>Score {_fmt(row.get('score'), 1)}</div>"
-            f"{grid}</div>")
+            f"{grid}{ef}</div>")
 
 
 def render_podium(focus_rows: list) -> None:
