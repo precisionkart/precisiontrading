@@ -26,6 +26,7 @@ rich>=13.0                # nice terminal tables
 
 # --- Web app (Phase 7) ---
 streamlit>=1.30           # web dashboard / My Picks analyzer
+plotly>=5.20              # interactive dashboard charts (Phase 7.5)
 
 # --- Tests ---
 pytest>=7.4

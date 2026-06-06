@@ -122,8 +122,10 @@ def full_scan(ignore_rvol: bool = False) -> dict:
         if not ref.empty:
             store.save_universe_snapshot(pipeline.normalize_universe(ref.df))
     store.save_scan_cache({"focus": focus, "targets": uni.df, "earnings": ern.df,
-                           "ipo": ipo_res.watchlist}, reg, as_of)
+                           "ipo": ipo_res.watchlist}, reg, as_of,
+                          theme_rank=theme_ctx.theme_rank)
     return {"regime": RegimeView(reg.state, reg.rationale), "theme_ctx": theme_ctx,
+            "themes": store._themes_list(theme_ctx.theme_rank),
             "focus": focus, "targets": uni.df, "earnings": ern.df,
             "ipo": ipo_res.watchlist, "as_of": as_of, "warnings": warnings}
 
@@ -281,6 +283,139 @@ def pick_card(pr) -> None:
   <div class='pp-checks'>{checks}</div>
   <div class='pp-verdict'>{_html.escape(pr.verdict)}</div>
 </div>""", unsafe_allow_html=True)
+
+
+def render_top10(df, key: str = "top10") -> Optional[str]:
+    """Render the Top-10 table (RS cells tier-colored, Score gradient) with
+    single-row selection. Returns the selected ticker, or None."""
+    import dashboard_logic as dl
+    if df is None or len(df) == 0:
+        st.markdown("<div class='pp-empty'>No ranked names yet.</div>", unsafe_allow_html=True)
+        return None
+
+    def _rs_style(v):
+        try:
+            bg, fg = dl.rs_tier(float(v))
+        except (TypeError, ValueError):
+            return ""
+        return f"background-color:{bg};color:{fg};font-weight:600"
+
+    styler = (df.style
+              .map(_rs_style, subset=["RS"])
+              .background_gradient(subset=["Score"], cmap="Greens")
+              .format({"Score": lambda v: f"{v:.1f}" if pd.notna(v) else "—",
+                       "RS": lambda v: f"{v:.0f}" if pd.notna(v) else "—",
+                       "R:R": lambda v: f"{v:.1f}:1" if pd.notna(v) else "—"}))
+    event = st.dataframe(styler, use_container_width=True, hide_index=True,
+                         on_select="rerun", selection_mode="single-row", key=key)
+    rows = []
+    try:
+        rows = event.selection.rows
+    except Exception:  # noqa: BLE001
+        pass
+    if rows:
+        return str(df.iloc[rows[0]]["Ticker"])
+    return None
+
+
+def render_sector_strength(rows, key: str = "sector") -> Optional[str]:
+    """Render the Sector Strength widget with single-row selection. Returns the
+    clicked sector/theme name, or None."""
+    import dashboard_logic as dl
+    if not rows:
+        st.markdown("<div class='pp-empty'>Theme rankings unavailable.</div>",
+                    unsafe_allow_html=True)
+        return None
+    disp = pd.DataFrame([{"Sector": r["Sector"], "RS Score": r["RS Score"],
+                          "Δ vs prior": dl.delta_str(r["Δ"]),
+                          "Hot": "● Hot" if r["hot"] else ""} for r in rows])
+    styler = (disp.style
+              .background_gradient(subset=["RS Score"], cmap="Greens")
+              .format({"RS Score": lambda v: f"{v:.1f}" if pd.notna(v) else "—"}))
+    event = st.dataframe(styler, use_container_width=True, hide_index=True,
+                         on_select="rerun", selection_mode="single-row", key=key)
+    rows_sel = []
+    try:
+        rows_sel = event.selection.rows
+    except Exception:  # noqa: BLE001
+        pass
+    if rows_sel:
+        return str(disp.iloc[rows_sel[0]]["Sector"])
+    return None
+
+
+def rs_badge_html(rs) -> str:
+    import dashboard_logic as dl
+    bg, fg = dl.rs_tier(rs if isinstance(rs, (int, float)) else float("nan"))
+    val = "—" if (rs is None or (isinstance(rs, float) and rs != rs)) else f"{rs:.0f}"
+    return (f"<div class='pp-rsbadge' style='background:{bg};color:{fg}'>"
+            f"<span class='lab'>RS</span><span class='val'>{val}</span></div>")
+
+
+def pills_html(criteria) -> str:
+    import dashboard_logic as dl
+    cells = []
+    for c in criteria:
+        kind = dl.pill_kind(c.passed)
+        mark = "✓" if c.passed else "✗"
+        val = f"<span class='val'>{_html.escape(str(c.value))}</span>" if c.value else ""
+        cells.append(
+            f"<div class='pp-pill2 {kind}'><span class='name'><span class='mk'>{mark}</span>"
+            f"{_html.escape(c.label)}</span>{val}</div>")
+    return "<div class='pp-pills2'>" + "".join(cells) + "</div>"
+
+
+def stat_row_html(entry, stop, target, rr) -> str:
+    return f"""<div class='pp-stats'>
+  <div class='pp-stat'><div class='k'>Entry</div><div class='v green'>${_fmt(entry)}</div></div>
+  <div class='pp-stat'><div class='k'>Stop (.89)</div><div class='v red'>${_fmt(stop)}</div></div>
+  <div class='pp-stat'><div class='k'>Target</div><div class='v'>${_fmt(target)}</div></div>
+  <div class='pp-stat'><div class='k'>R : R</div><div class='v'>{_fmt(rr,1)}:1</div></div>
+</div>"""
+
+
+def legend_html(entry, stop, target, rr) -> str:
+    from pinpoint import chart_config as cc
+    items = []
+    for label, price, color in cc.annotation_lines(entry, stop, target, rr):
+        items.append(f"<span class='item'><span class='sw' style='border-color:{color}'></span>"
+                     f"{_html.escape(label)} <b>${price:.2f}</b></span>")
+    return "<div class='pp-legend'>" + "".join(items) + "</div>" if items else ""
+
+
+def render_detail(pr) -> None:
+    """The drill-down detail view: RS badge + ticker, interactive daily/weekly
+    Plotly charts (legend below), color-coded pills, Entry/Stop/Target/R:R stats,
+    and a template-generated technical-analysis paragraph."""
+    import dashboard_logic as dl
+    import charts_plotly as cp
+
+    sub = " · ".join(str(b) for b in [pr.sector, pr.theme, pr.pattern or pr.stage] if b)
+    st.markdown(f"<div class='pp-detail-head'>{rs_badge_html(pr.rs)}"
+                f"<div><div class='tk'>{_html.escape(pr.ticker)}</div>"
+                f"<div class='sub'>{_html.escape(sub)}</div></div></div>", unsafe_allow_html=True)
+
+    if pr.daily is not None and len(pr.daily):
+        dfig = cp.daily_figure(pr.daily, entry=pr.entry, stop=pr.stop, target=pr.target,
+                               pattern_bars=pr.pattern_bars)
+        if dfig is not None:
+            st.plotly_chart(dfig, use_container_width=True, key=f"d_{pr.ticker}")
+        st.markdown(legend_html(pr.entry, pr.stop, pr.target, pr.reward_risk),
+                    unsafe_allow_html=True)
+        wfig = cp.weekly_figure(pr.daily)
+        if wfig is not None:
+            st.plotly_chart(wfig, use_container_width=True, key=f"w_{pr.ticker}")
+    else:
+        st.markdown("<div class='pp-empty'>chart unavailable (OHLCV not cached)</div>",
+                    unsafe_allow_html=True)
+
+    if pr.criteria:
+        st.markdown(pills_html(pr.criteria), unsafe_allow_html=True)
+    if pr.entry is not None or pr.reward_risk is not None:
+        st.markdown(stat_row_html(pr.entry, pr.stop, pr.target, pr.reward_risk),
+                    unsafe_allow_html=True)
+    st.markdown(f"<div class='pp-ta'>{_html.escape(dl.technical_analysis(pr))}</div>",
+                unsafe_allow_html=True)
 
 
 def disclaimer_footer() -> None:

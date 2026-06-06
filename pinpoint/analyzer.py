@@ -38,6 +38,30 @@ class GateCheck:
 
 
 @dataclass
+class Criterion:
+    """One row of the canonical Pinpoint UI checklist (Phase 7.5 pills)."""
+    key: str
+    label: str
+    passed: bool
+    value: str = ""
+
+
+# Canonical UI checklist order (spec Phase 7.5 point 4).
+UI_CRITERIA_ORDER = (
+    "reward_risk", "stage_2", "valid_pattern", "tight_contraction",
+    "near_high", "volume", "relative_strength", "growth", "hot_theme",
+    "timeframe_continuity",
+)
+UI_CRITERIA_LABELS = {
+    "reward_risk": "Risk : Reward", "stage_2": "Stage 2",
+    "valid_pattern": "Bullish Pattern", "tight_contraction": "Tight Contraction",
+    "near_high": "Near 52-Week High", "volume": "Volume Confirmation",
+    "relative_strength": "Relative Strength", "growth": "Growth",
+    "hot_theme": "Hot Theme", "timeframe_continuity": "Time-Frame Continuity",
+}
+
+
+@dataclass
 class PickResult:
     ticker: str
     company: Optional[str] = None
@@ -60,6 +84,14 @@ class PickResult:
     verdict: str = ""
     daily: Optional[pd.DataFrame] = None  # for chart rendering (not serialized)
     note: str = ""
+    # Phase 7.5 detail-view extras (additive; CLI/report don't use these).
+    criteria: list = field(default_factory=list)     # list[Criterion]
+    rvol: float = float("nan")
+    measured_move_pct: Optional[float] = None
+    growth_summary: str = ""
+    continuity_score: float = float("nan")
+    theme_rank: Optional[int] = None
+    theme_score: Optional[float] = None
 
     @property
     def is_pinpoint(self) -> bool:
@@ -150,10 +182,21 @@ def analyze_picks(client, tickers: list[str], regime,
     return results
 
 
+def _clean_str(x):
+    """pandas string columns use <NA>, which raises in `if x` / `or` contexts;
+    normalize to a plain str or None so downstream rendering is safe."""
+    try:
+        if x is None or pd.isna(x):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return str(x)
+
+
 def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_close, g) -> PickResult:
     rs = float(row.get("rs", np.nan))
-    sector = row.get("sector")
-    industry = row.get("industry")
+    sector = _clean_str(row.get("sector"))
+    industry = _clean_str(row.get("industry"))
     daily_raw = ohlcv_provider(ticker)
     have_ohlcv = daily_raw is not None and len(daily_raw) >= 30
     d = ohlcv_mod.add_moving_averages(daily_raw) if have_ohlcv else None
@@ -222,8 +265,47 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
     result = score_layers(base_layers)
 
     theme_label = theme_ctx.theme_label(sector, industry) if theme_ctx else ""
+    growth = fundamentals_mod.assess_row(row)
+    contraction = ohlcv_mod.emas_converged(d) if have_ohlcv else False
+    cont_aligned = bool(base_layers.get("timeframe_continuity"))
+    cont_score = (timeframes_mod.continuity(daily_raw).score if have_ohlcv else float("nan"))
+    hot_theme = bool(theme_ctx and theme_ctx.is_hot_theme(sector, industry))
+    measured_pct = None
+    if setup and setup.measured_target and setup.entry:
+        measured_pct = (setup.measured_target / setup.entry - 1.0) * 100.0
+    trec = (theme_ctx.theme_rank.get(theme_ctx.theme_for(sector, industry))
+            if theme_ctx and theme_ctx.theme_for(sector, industry) in theme_ctx.theme_rank else None)
+
+    # canonical UI checklist (Phase 7.5) — every criterion, pass/fail + value.
+    rr_ok = bool(rr is not None and rr >= CONFIG.entry.min_reward_risk)
+    crit = {
+        "reward_risk": Criterion("reward_risk", UI_CRITERIA_LABELS["reward_risk"], rr_ok,
+                                 f"{rr:.1f}:1" if rr is not None else "n/a"),
+        "stage_2": Criterion("stage_2", UI_CRITERIA_LABELS["stage_2"], stage.is_stage2,
+                             stage.label.replace(" (advancing)", "")),
+        "valid_pattern": Criterion("valid_pattern", UI_CRITERIA_LABELS["valid_pattern"],
+                                   pat is not None, pat.label.split(" /")[0] if pat else "none"),
+        "tight_contraction": Criterion("tight_contraction", UI_CRITERIA_LABELS["tight_contraction"],
+                                       bool(contraction), "converged" if contraction else "—"),
+        "near_high": Criterion("near_high", UI_CRITERIA_LABELS["near_high"],
+                               pbh <= g.max_pct_below_high,
+                               f"{pbh:.1f}% below" if pbh == pbh else "n/a"),
+        "volume": Criterion("volume", UI_CRITERIA_LABELS["volume"], relv > g.min_rel_volume,
+                            f"RVOL {relv:.2f}" if relv == relv else "n/a"),
+        "relative_strength": Criterion("relative_strength", UI_CRITERIA_LABELS["relative_strength"],
+                                       rs >= g.min_rs_rating, f"RS {rs:.0f}" if rs == rs else "n/a"),
+        "growth": Criterion("growth", UI_CRITERIA_LABELS["growth"], growth.strong_growth,
+                            growth.summary()),
+        "hot_theme": Criterion("hot_theme", UI_CRITERIA_LABELS["hot_theme"], hot_theme,
+                               theme_label or "—"),
+        "timeframe_continuity": Criterion("timeframe_continuity",
+                                          UI_CRITERIA_LABELS["timeframe_continuity"],
+                                          cont_aligned, "weekly+daily up" if cont_aligned else "—"),
+    }
+    criteria = [crit[k] for k in UI_CRITERIA_ORDER]
+
     pr = PickResult(
-        ticker=ticker, company=row.get("company"), sector=sector, theme=theme_label,
+        ticker=ticker, company=_clean_str(row.get("company")), sector=sector, theme=theme_label,
         price=price, rs=rs, stage=stage.label, classification=classification,
         gates=gates, pattern=(pat.label if pat else None),
         pattern_bars=(pat.bars if pat else 0),
@@ -233,6 +315,10 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         score=result.score, n_layers=len(result.fired), layers=result.breakdown_str(),
         daily=daily_raw if have_ohlcv else None,
         note="" if have_ohlcv else "no OHLCV available",
+        criteria=criteria, rvol=relv, measured_move_pct=measured_pct,
+        growth_summary=growth.summary(), continuity_score=cont_score,
+        theme_rank=(trec["rank"] if trec else None),
+        theme_score=(trec["score"] if trec else None),
     )
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr

@@ -33,19 +33,21 @@ from .ohlcv import add_moving_averages, to_weekly
 
 logger = logging.getLogger("pinpoint.charts")
 
-# --- palette (from the product brief) --------------------------------------
-WHITE = "#FFFFFF"
-GRID = "#F3F4F6"
-UP = "#16A34A"
-DOWN = "#DC2626"
-EMA5 = "#A78BFA"
-EMA10 = "#3B82F6"
-EMA20 = "#F59E0B"
-SMA50 = "#737373"
-SMA200 = "#0A0A0A"
-TARGET_GRAY = "#737373"
-TEXT = "#0A0A0A"
-SUBTLE = "#9CA3AF"
+# --- palette (shared via chart_config so the two renderers can't drift) -----
+from . import chart_config as _cc   # noqa: E402
+
+WHITE = _cc.WHITE
+GRID = _cc.GRID
+UP = _cc.UP
+DOWN = _cc.DOWN
+EMA5 = _cc.MA_COLORS["EMA5"]
+EMA10 = _cc.MA_COLORS["EMA10"]
+EMA20 = _cc.MA_COLORS["EMA20"]
+SMA50 = _cc.MA_COLORS["SMA50"]
+SMA200 = _cc.MA_COLORS["SMA200"]
+TARGET_GRAY = _cc.TARGET_COLOR
+TEXT = _cc.TEXT
+SUBTLE = _cc.SUBTLE
 
 
 def _setup_fonts() -> str:

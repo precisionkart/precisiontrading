@@ -135,6 +135,7 @@ class ScanCache:
     lists: dict = field(default_factory=dict)     # name -> DataFrame
     regime_state: str = "neutral"
     regime_rationale: list = field(default_factory=list)
+    themes: list = field(default_factory=list)    # [{theme,rank,score}, ...]
     as_of: str = ""
     date: str = ""
 
@@ -143,8 +144,16 @@ class ScanCache:
         return self.date == date.today().isoformat()
 
 
-def save_scan_cache(lists: dict, regime, as_of: str) -> None:
-    """Persist the scan lists + regime so the dashboard renders without a refetch."""
+def _themes_list(theme_rank) -> list:
+    if not theme_rank:
+        return []
+    return [{"theme": t, "rank": r["rank"], "score": r["score"]}
+            for t, r in sorted(theme_rank.items(), key=lambda kv: kv[1]["rank"])]
+
+
+def save_scan_cache(lists: dict, regime, as_of: str, theme_rank=None) -> None:
+    """Persist the scan lists + regime + theme rankings so the dashboard renders
+    without a refetch."""
     cdir = _cache_dir()
     try:
         for name in _CACHE_LISTS:
@@ -156,7 +165,8 @@ def save_scan_cache(lists: dict, regime, as_of: str) -> None:
                 os.remove(path)
         meta = {"as_of": as_of, "date": date.today().isoformat(),
                 "regime_state": getattr(regime, "state", "neutral"),
-                "regime_rationale": getattr(regime, "rationale", []) or []}
+                "regime_rationale": getattr(regime, "rationale", []) or [],
+                "themes": _themes_list(theme_rank)}
         with open(os.path.join(cdir, "meta.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
     except Exception as exc:  # noqa: BLE001
@@ -232,6 +242,7 @@ def load_scan_cache() -> Optional[ScanCache]:
             lists[name] = pd.read_parquet(path) if os.path.exists(path) else pd.DataFrame()
         return ScanCache(lists=lists, regime_state=meta.get("regime_state", "neutral"),
                          regime_rationale=meta.get("regime_rationale", []),
+                         themes=meta.get("themes", []),
                          as_of=meta.get("as_of", ""), date=meta.get("date", ""))
     except Exception as exc:  # noqa: BLE001
         logger.warning("scan cache read failed: %s", exc)

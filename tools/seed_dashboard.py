@@ -40,7 +40,8 @@ def main() -> None:
     # RS reference for My-Picks must be BROAD (not the RVOL-gated targets), per 7B.
     store.save_universe_snapshot(ref_norm)
     store.save_scan_cache({"focus": focus, "targets": uni.df, "earnings": ern.df,
-                           "ipo": ipo_res.watchlist}, reg, as_of)
+                           "ipo": ipo_res.watchlist}, reg, as_of,
+                          theme_rank=theme_ctx.theme_rank)
     store.save_watchlist(["NVDA", "MEC"])
     print(f"seeded: {len(focus)} focus, {len(uni.df)} targets, {len(ern.df)} earnings, "
           f"{len(ipo_res.watchlist)} ipo; watchlist [NVDA, MEC]; as_of {as_of}")

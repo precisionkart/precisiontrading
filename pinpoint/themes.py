@@ -60,6 +60,17 @@ SECTOR_THEME_MAP: dict[str, str] = {
 }
 
 
+def _safe_str(x) -> str:
+    """NA/None-safe string (snapshot string columns use pandas <NA>, which raises
+    in a boolean `or` context)."""
+    try:
+        if x is None or pd.isna(x):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return str(x)
+
+
 def _trailing_perf(close: pd.Series) -> dict[str, float]:
     """Trailing % returns from a daily close series (windows in trading days)."""
     def r(n: int) -> float:
@@ -80,11 +91,11 @@ class ThemeContext:
 
     # -- mapping --
     def theme_for(self, sector: Optional[str], industry: Optional[str]) -> Optional[str]:
-        ind = (industry or "").lower()
+        ind = _safe_str(industry).lower()
         for kw, theme in INDUSTRY_THEME_KEYWORDS:
             if kw in ind and theme in self.theme_rank:
                 return theme
-        return SECTOR_THEME_MAP.get((sector or "").strip())
+        return SECTOR_THEME_MAP.get(_safe_str(sector).strip())
 
     def theme_label(self, sector: Optional[str], industry: Optional[str]) -> str:
         theme = self.theme_for(sector, industry)
@@ -102,7 +113,7 @@ class ThemeContext:
 
     def is_top_industry(self, industry: Optional[str],
                         top_frac: float = TOP_INDUSTRY_FRAC) -> bool:
-        rec = self.industry_rank.get((industry or "").strip())
+        rec = self.industry_rank.get(_safe_str(industry).strip())
         return bool(rec and rec["pct"] >= (1.0 - top_frac))
 
     def top_themes(self, n: int = 5) -> list[tuple[str, dict]]:
@@ -179,6 +190,19 @@ def rank_industries(client=None) -> tuple[dict[str, dict], list[str]]:
                                                   "rank": int(order.iloc[k]), "score": round(valid.iloc[k], 2)}
                      for k, i in enumerate(valid.index)}
     return industry_rank, warnings
+
+
+def context_from_list(themes: list) -> ThemeContext:
+    """Rebuild a (theme-only) ThemeContext from a serialized [{theme,rank,score}]
+    list — used by the dashboard when only the cached/published rankings are
+    available (no live ETF pull). Industry rank is empty in this mode."""
+    n = len(themes or [])
+    rank = {}
+    for t in (themes or []):
+        r = t.get("rank")
+        pct = (1.0 - (r - 1) / n) if (n > 1 and r) else 1.0
+        rank[t.get("theme")] = {"rank": r, "score": t.get("score"), "pct": pct}
+    return ThemeContext(theme_rank=rank, industry_rank={}, n_themes=n, n_industries=0)
 
 
 def build_theme_context(client=None, ohlcv_provider=None) -> ThemeContext:
