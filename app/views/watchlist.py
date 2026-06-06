@@ -47,12 +47,24 @@ if st.session_state.get("wlpage_key") != key:
             offline_universe=ref_df if CLOUD else None, cache_only=CLOUD)
     st.session_state["wlpage_key"] = key
 
-for pr in st.session_state.get("wlpage", []):
-    c.pick_card(pr)
-    if st.button(f"Remove {pr.ticker}", key=f"rm_{pr.ticker}"):
-        store.remove_from_watchlist(pr.ticker)
-        st.session_state.pop("wlpage_key", None)
-        st.session_state.pop("wlstrip_key", None)
-        st.rerun()
+graded = st.session_state.get("wlpage", [])
+by_tk = {pr.ticker: pr for pr in graded}
+
+# remove control
+rm = st.multiselect("Remove", [pr.ticker for pr in graded], label_visibility="collapsed",
+                    placeholder="Remove tickers…")
+if rm and st.button("Remove selected", key="wl_remove"):
+    for t in rm:
+        store.remove_from_watchlist(t)
+    st.session_state.pop("wlpage_key", None)
+    st.session_state.pop("wlstrip_key", None)
+    st.rerun()
+
+# compact cards (same format as the Dashboard Top 10)
+for i, pr in enumerate(graded):
+    src = "Focus" if pr.classification == "A+" else "Watch"
+    row = {"Ticker": pr.ticker, "Sector": pr.sector, "Score": pr.score, "RS": pr.rs,
+           "Pattern": pr.pattern or "—", "R:R": pr.reward_risk, "Source": src}
+    c.compact_card(row, lambda tk: by_tk.get(tk), key=f"wl{i}")
 
 c.disclaimer_footer()

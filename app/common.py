@@ -478,24 +478,18 @@ def render_detail_inline(pr) -> None:
 
 
 def render_treemap(rows, key: str = "treemap"):
-    """Render the sector treemap; return a clicked sector (native select if it
-    works, else None). A selectbox fallback handles filtering reliably."""
+    """Render the sector treemap as a VISUAL widget. (Streamlit doesn't reliably
+    surface Plotly treemap click events, so filtering is handled by a selectbox
+    alongside — see the Dashboard view. Returns None.)"""
     import charts_plotly as cp
     fig = cp.sector_treemap(rows)
     if fig is None:
         st.markdown("<div class='pp-empty'>Theme rankings unavailable.</div>",
                     unsafe_allow_html=True)
         return None
-    clicked = None
-    try:
-        event = st.plotly_chart(fig, use_container_width=True, key=key, on_select="rerun")
-        pts = getattr(getattr(event, "selection", None), "points", None) or \
-            (event.get("selection", {}).get("points") if isinstance(event, dict) else None)
-        if pts:
-            clicked = pts[0].get("label")
-    except Exception:  # noqa: BLE001
-        st.plotly_chart(fig, use_container_width=True, key=key + "_static")
-    return clicked
+    st.plotly_chart(fig, use_container_width=True, key=key,
+                    config={"displayModeBar": False})
+    return None
 
 
 def watchlist_strip(graded, max_tiles: int = 5) -> None:
