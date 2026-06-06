@@ -13,7 +13,7 @@ def _build():
     universe = pipeline.normalize_universe(sample_data.universe_df())
     targets = pipeline.build_targets(universe, reg, save_snapshot=False)
     focus = pipeline.build_focus(targets)
-    earnings = pipeline.build_earnings(sample_data.earnings_df())
+    earnings = pipeline.build_earnings(sample_data.earnings_df(), persist=False)
     return reg, targets, focus, earnings
 
 

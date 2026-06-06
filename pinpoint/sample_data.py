@@ -118,22 +118,27 @@ _UNIVERSE_ROWS: list[dict] = [
 _EARNINGS_ROWS: list[dict] = [
     dict(Ticker="HOOD", Company="Robinhood Markets", Sector="Financial",
          Price="62.10", **{"Avg Volume": "31.00M"}, **{"Rel Volume": "3.40"},
-         Gap="8.40%",   # gapped UP -> keep
+         Gap="8.40%", Change="7.00%",   # gapped UP and HELD the gap -> keep
          **{"Perf Quart": "44.10%", "Perf Half": "78.40%", "Perf Year": "210.50%",
             "Perf Month": "18.90%"}),
     dict(Ticker="CLS", Company="Celestica Inc", Sector="Technology",
          Price="76.50", **{"Avg Volume": "4.40M"}, **{"Rel Volume": "3.10"},
-         Gap="5.20%",   # gapped UP -> keep
+         Gap="5.20%", Change="4.50%",   # gapped UP and held -> keep
          **{"Perf Quart": "37.40%", "Perf Half": "62.10%", "Perf Year": "165.30%",
             "Perf Month": "15.20%"}),
     dict(Ticker="BADER", Company="Bad Earnings Co", Sector="Technology",
          Price="40.00", **{"Avg Volume": "2.00M"}, **{"Rel Volume": "4.50"},
-         Gap="-9.80%",  # gapped DOWN -> EXCLUDE regardless of numbers
+         Gap="-9.80%", Change="-11.00%",  # gapped DOWN -> EXCLUDE
          **{"Perf Quart": "55.00%", "Perf Half": "90.00%", "Perf Year": "180.00%",
             "Perf Month": "20.00%"}),
+    dict(Ticker="TRAPX", Company="Bull Trap Co", Sector="Technology",
+         Price="50.00", **{"Avg Volume": "3.00M"}, **{"Rel Volume": "4.00"},
+         Gap="9.00%", Change="-2.00%",  # gapped UP but CLOSED NEGATIVE -> EXCLUDE (bull trap)
+         **{"Perf Quart": "30.00%", "Perf Half": "40.00%", "Perf Year": "70.00%",
+            "Perf Month": "10.00%"}),
     dict(Ticker="MEHV", Company="Cheap Reaction Inc", Sector="Consumer",
          Price="7.50", **{"Avg Volume": "1.00M"}, **{"Rel Volume": "2.20"},
-         Gap="6.00%",   # gapped up but price < $10 -> EXCLUDE on gate
+         Gap="6.00%", Change="5.00%",   # gapped up but price < $10 -> EXCLUDE on gate
          **{"Perf Quart": "10.00%", "Perf Half": "15.00%", "Perf Year": "25.00%",
             "Perf Month": "5.00%"}),
 ]

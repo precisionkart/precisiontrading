@@ -97,6 +97,40 @@ def test_detect_earnings_flag_gap_fill_negative():
     assert res["detected"] is False                   # didn't hold the gap
 
 
+def test_enrich_focus_earnings_flag_fires_and_boosts_score():
+    from pinpoint import pipeline
+    from pinpoint import regime as regime_mod
+    df, gap_date = _gap_flag_ohlcv(fill_gap=False)
+    universe = pd.DataFrame([{
+        "ticker": "EFX", "company": "E", "sector": "Technology", "industry": "Software",
+        "beta": 1.5, "sma20_pct": 3.0, "sma50_pct": 9.0, "sma200_pct": 22.0,
+        "rel_volume": 3.0, "eps_this_y": 50.0, "pct_below_high": 2.0}])
+    targets = pd.DataFrame([{
+        "ticker": "EFX", "company": "E", "sector": "Technology", "price": 62.0,
+        "rs": 95.0, "stage": "Stage 2 (advancing)", "growth": "EPS yr 50%", "theme": ""}])
+    reg = regime_mod.from_fundaments(sample_data.regime_fixture())
+    idx = sample_data.ohlcv_fixture("SPY", shape="index")
+    ctx = {"EFX": {"gap_date": gap_date.date().isoformat(),
+                   "initial_post_gap_high": 61.0, "gap_pct": 8.4}}
+
+    with_flag = pipeline.enrich_focus(targets, universe, reg,
+                                      ohlcv_provider=lambda t: df, index_daily=idx,
+                                      earnings_ctx=ctx)
+    assert len(with_flag) == 1
+    row = with_flag.iloc[0]
+    assert bool(row["earnings_flag_active"]) is True
+    assert row["gap_pct"] == 8.4
+    assert "Earnings flag breakout (highest-edge)" in row["layers"]
+
+    # heavy weighting: same name without the earnings flag scores lower by ~4.0
+    without = pipeline.enrich_focus(targets, universe, reg,
+                                    ohlcv_provider=lambda t: df, index_daily=idx,
+                                    earnings_ctx={})
+    assert len(without) == 1
+    assert with_flag.iloc[0]["pinpoint_score"] - without.iloc[0]["pinpoint_score"] == \
+        pytest.approx(4.0, abs=1e-6)
+
+
 def test_active_ctx():
     d0 = date(2026, 5, 1)
     ew.persist([{"ticker": "ABC", "gap": 9.0}], ohlcv_provider=_ohlcv, today=d0)

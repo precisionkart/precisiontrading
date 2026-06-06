@@ -96,7 +96,7 @@ def run_selftest() -> int:
     )
 
     # 4. Earnings (Section 7) — gap-UP only.
-    earnings = pipeline.build_earnings(sample_data.earnings_df())
+    earnings = pipeline.build_earnings(sample_data.earnings_df(), persist=False)
     _print_table(
         "EARNINGS — gapped-UP reactions only (reaction > numbers), by RS",
         earnings,

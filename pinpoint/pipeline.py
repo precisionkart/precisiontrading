@@ -96,6 +96,9 @@ def normalize_universe(df: pd.DataFrame) -> pd.DataFrame:
     for key in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year"):
         out[key] = get_col(df, COLUMN_CANDIDATES[key], pct=True, expect_fraction=True)
 
+    # day's % Change (technical view; float fraction) — for the earnings bull-trap filter.
+    out["change"] = get_col(df, COLUMN_CANDIDATES["change"], pct=True, expect_fraction=True)
+
     # EPS/Sales come from the valuation view as legacy '%' strings (not fractions).
     out["eps_this_y"] = get_col(df, COLUMN_CANDIDATES["eps_this_y"], pct=True)
     out["eps_past5y"] = get_col(df, COLUMN_CANDIDATES["eps_past5y"], pct=True)
@@ -264,10 +267,14 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
 # ---------------------------------------------------------------------------
 # build_earnings  (gap-UP only)
 # ---------------------------------------------------------------------------
-def build_earnings(raw: pd.DataFrame) -> pd.DataFrame:
-    """Earnings-reaction list (3.3 / Section 7): price>$10, avg vol>=300k, and
-    GAPPED UP only — any gap-down is excluded regardless of the numbers. Ranked
-    by RS proxy."""
+def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
+    """Earnings-reaction list (3.3 / Section 7). Bull-trap fix: a name must have
+    gapped up AND closed up AND held >= half the opening gap (gap>0, change>0,
+    change>=gap*0.5) — gap-and-trap distribution is excluded. Surviving names are
+    persisted to earnings_watch.json so a flag breakout 1-4 weeks later becomes a
+    first-class Focus scoring path. Ranked by RS proxy."""
+    from . import earnings_watch as ew
+
     universe = normalize_universe(raw)
     if len(universe) == 0:
         return pd.DataFrame()
@@ -283,11 +290,12 @@ def build_earnings(raw: pd.DataFrame) -> pd.DataFrame:
         price = row.get("price", np.nan)
         avgv = row.get("avg_volume", np.nan)
         gap = row.get("gap", np.nan)
+        change = row.get("change", np.nan)
         if not (price > g.min_price):
             continue
         if not (avgv >= g.min_avg_volume):
             continue
-        if not (gap == gap and gap > 0):     # gap-UP only; NaN/down excluded
+        if not ew.passes_gap_filter(gap, change):     # gap-up + held (no bull trap)
             continue
         rows.append({
             "ticker": row["ticker"],
@@ -295,6 +303,7 @@ def build_earnings(raw: pd.DataFrame) -> pd.DataFrame:
             "sector": row["sector"],
             "price": price,
             "gap": gap,
+            "change": change,
             "rel_volume": row.get("rel_volume", np.nan),
             "rs": row.get("rs", np.nan),
             "setup": "earnings flag — watch for light-volume flag then breakout",
@@ -303,6 +312,17 @@ def build_earnings(raw: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(rows)
     if len(out):
         out = out.sort_values("rs", ascending=False, na_position="last").reset_index(drop=True)
+        if persist:
+            ew.housekeeping()                          # expire + prune
+            ew.persist([{"ticker": r["ticker"], "gap": r["gap"], "sector": r["sector"],
+                         "theme": ""} for _, r in out.iterrows()])
+            # "tracked since" = days the name has been on the watch
+            store = {e["ticker"]: e for e in ew.load_store()}
+            today = date.today()
+            def _since(tk):
+                gd = ew._parse(store.get(tk, {}).get("gap_date"))
+                return (today - gd).days if gd else 0
+            out["tracked_days"] = out["ticker"].map(_since)
     return out
 
 
@@ -356,7 +376,8 @@ def _sr_flip(d: pd.DataFrame) -> bool:
 
 def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
                  ohlcv_provider=None, index_daily: pd.DataFrame | None = None,
-                 limit: int | None = None, theme_ctx=None, ipo_ctx=None) -> pd.DataFrame:
+                 limit: int | None = None, theme_ctx=None, ipo_ctx=None,
+                 earnings_ctx=None) -> pd.DataFrame:
     """Enrich Targets into Focus using OHLCV (3.6-3.8).
 
     For each target: fetch daily OHLCV, add MAs, detect the best pattern that
@@ -377,6 +398,10 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
     uni_by_ticker = {r["ticker"]: r for _, r in universe.iterrows()} if universe is not None else {}
     index_close = index_daily["Close"] if (index_daily is not None and "Close" in getattr(index_daily, "columns", [])) else None
 
+    from . import earnings_watch as ew
+    if earnings_ctx is None:
+        earnings_ctx = ew.active_ctx()
+
     rows = []
     for _, t in targets.iterrows():
         ticker = t["ticker"]
@@ -384,19 +409,35 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
         if daily is None or len(daily) < 30:
             continue
         d = ohlcv_mod.add_moving_averages(daily)
+        lookback = CONFIG.entry.stop_lookback
+
+        # Earnings flag (3.6 ⭐): if the name is on the active earnings watch and
+        # is breaking out of its flag today, that is the highest-edge setup — let
+        # it into Focus even if no generic measured pattern fires.
+        ef = {"detected": False, "ema_zone": None}
+        ew_entry = earnings_ctx.get(ticker)
+        if ew_entry and ew_entry.get("initial_post_gap_high"):
+            ef = patterns_mod.detect_earnings_flag(
+                daily, ew_entry.get("gap_date"), ew_entry["initial_post_gap_high"])
 
         pat = patterns_mod.best_pattern(d, finviz_signals=None, require_measured=True)
-        if pat is None:
+        if pat is not None:
+            stop_support = float(d["Low"].iloc[-lookback:].min())
+            setup = entries_mod.compute_setup(pat.trigger, stop_support, pat.measured_target)
+        elif ef["detected"]:
+            # synthesize a setup from the flag: breakout trigger + tight pivot +
+            # prior-advance (the gap pole) projection.
+            trigger = float(d["High"].iloc[-min(5, len(d)):].max())
+            stop_support = float(d["Low"].iloc[-lookback:].min())
+            measured = patterns_mod._prior_advance_target(d, trigger, ef.get("flag_days", 10) or 10,
+                                                          fallback=trigger * 1.15)
+            setup = entries_mod.compute_setup(trigger, stop_support, measured)
+        else:
             continue
-        # Stop hugs the IMMEDIATE pivot (tight coil low over the last few bars),
-        # NOT the full pattern low — front-running the breakout for tight risk
-        # against the measured move (3.7). A name still mid-base therefore has a
-        # wide pivot and naturally fails the R:R gate until it coils at the top.
-        lookback = CONFIG.entry.stop_lookback
-        stop_support = float(d["Low"].iloc[-lookback:].min())
-        setup = entries_mod.compute_setup(pat.trigger, stop_support, pat.measured_target)
-        if not setup.rr_ok:
-            continue                              # Focus requires R:R >= 5:1
+        # Focus requires R:R >= 5:1 — UNLESS it's a confirmed earnings flag (the
+        # spec's best setup earns inclusion on its own).
+        if not setup.rr_ok and not ef["detected"]:
+            continue
 
         cont = timeframes_mod.continuity(daily)
         contraction = ohlcv_mod.emas_converged(d)
@@ -414,6 +455,7 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
                                        theme_ctx=theme_ctx, ipo_ctx=ipo_ctx)
                        if urow is not None else {"regime_bull": regime.state == BULL,
                                                  "chart_ok": True, "not_earnings_gap_down": True})
+        ef_active = bool(ef["detected"])
         base_layers.update({
             "valid_pattern": True,
             "tight_contraction": bool(contraction),
@@ -421,11 +463,14 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "support_resistance_flip": _sr_flip(d),
             "timeframe_continuity": cont.aligned,
             "beach_ball": bool(bb_fired),
-            "reward_risk": True,
+            "reward_risk": bool(setup.rr_ok),
+            "earnings_flag": ef_active,
         })
         result = score_layers(base_layers)
         if result.disqualified:
             continue
+        if ef_active:
+            ew.mark_triggered(ticker, ef.get("ema_zone"))
 
         sector = (urow.get("sector") if urow is not None else t.get("sector"))
         industry = (urow.get("industry") if urow is not None else None)
@@ -438,9 +483,9 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "price": t.get("price"),
             "rs": t.get("rs"),
             "stage": t.get("stage"),
-            "pattern": pat.label,
-            "pattern_bars": pat.bars,
-            "finviz_confirmed": pat.finviz_confirmed,
+            "pattern": pat.label if pat is not None else "Earnings flag breakout",
+            "pattern_bars": pat.bars if pat is not None else (ef.get("flag_days") or 0),
+            "finviz_confirmed": pat.finviz_confirmed if pat is not None else False,
             "entry_trigger": setup.entry,
             "stop": setup.stop,
             "stop_kind": setup.stop_kind,
@@ -451,6 +496,10 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "continuity": cont.score,
             "beach_ball": bb_fired,
             "growth": t.get("growth"),
+            "earnings_flag_active": ef_active,
+            "earnings_flag_ema_zone": ef.get("ema_zone"),
+            "gap_date": ew_entry.get("gap_date") if ew_entry else None,
+            "gap_pct": ew_entry.get("gap_pct") if ew_entry else None,
             "pinpoint_score": result.score,
             "n_layers": len(result.fired),
             "layers": result.breakdown_str(),
@@ -458,7 +507,9 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
 
     out = pd.DataFrame(rows)
     if len(out):
-        out = out.sort_values(["pinpoint_score", "rs"], ascending=False).reset_index(drop=True)
+        # earnings flags sort to the TOP within their score band (3.6 ⭐).
+        out = out.sort_values(["earnings_flag_active", "pinpoint_score", "rs"],
+                              ascending=False).reset_index(drop=True)
         if limit:
             out = out.head(limit).reset_index(drop=True)
     return out
