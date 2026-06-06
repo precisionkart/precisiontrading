@@ -278,6 +278,76 @@ def detect_descending_channel(df: pd.DataFrame, window: int = 20) -> Optional[Pa
                    notes="parallel low-volume drift in uptrend")
 
 
+def detect_earnings_flag(df: pd.DataFrame, gap_date, gap_high: float,
+                         touch_atr: float = 0.6) -> dict:
+    """Gap-anchored earnings flag (spec 3.6 ⭐ — the highest-edge setup).
+
+    Unlike detect_flag (which infers a pole), this takes the persisted earnings
+    gap as the flagpole anchor and checks the consolidation since:
+      * 4-28 bars since the gap (the 1-4 week window),
+      * light volume (flag mean < 80% of the pre-gap 20-bar mean),
+      * tight, holding above the gap-day close (didn't fill the gap),
+      * today is a breakout: close > the flag's prior high on RVOL > 1.5,
+      * identifies which EMA (10/5/20) the flag's lows hugged (the reaction zone;
+        10 EMA = best entry, 5 = short pop, 20 = matured flag).
+
+    Returns a dict (detected, ema_zone, flag_days, flag_compression_pct,
+    breakout_volume_ratio).
+    """
+    from . import ohlcv as ohlcv_mod
+    out = {"detected": False, "ema_zone": None, "flag_days": 0,
+           "flag_compression_pct": float("nan"), "breakout_volume_ratio": float("nan")}
+    if df is None or len(df) < 25:
+        return out
+    d = ohlcv_mod.add_moving_averages(df)
+    try:
+        pos = d.index.get_indexer([pd.Timestamp(gap_date)], method="nearest")[0]
+    except Exception:  # noqa: BLE001
+        return out
+    last = len(d) - 1
+    flag_days = last - pos
+    if flag_days < 4 or flag_days > 28:
+        return out
+
+    gap_bar = d.iloc[pos]
+    flag = d.iloc[pos + 1:last]            # consolidation, excluding the breakout bar
+    today = d.iloc[last]
+    if len(flag) < 3:
+        return out
+
+    pre = d.iloc[max(0, pos - 20):pos]
+    pre_vol = pre["Volume"].mean() if len(pre) else float("nan")
+    flag_vol = flag["Volume"].mean()
+    light_volume = bool(pre_vol == pre_vol and flag_vol < 0.8 * pre_vol)
+
+    held_gap = bool(flag["Low"].min() >= gap_bar["Close"])     # didn't fill the gap
+    flag_high = float(flag["High"].max())
+    compression = (flag_high - float(flag["Low"].min())) / today["Close"] * 100.0
+    breakout = bool(today["Close"] > flag_high)
+    vol_ratio = today["Volume"] / flag_vol if flag_vol else float("nan")
+    breakout_vol = bool(vol_ratio == vol_ratio and vol_ratio > 1.5)
+
+    # EMA reaction zone — which EMA did the flag lows hug most (within touch_atr*ATR)?
+    ema_zone = None
+    atr = (d["High"] - d["Low"]).iloc[max(0, pos - 14):pos].mean()
+    if atr and atr == atr:
+        touches = {"5": 0, "10": 0, "20": 0}
+        for _, bar in flag.iterrows():
+            for z, col in (("5", "EMA5"), ("10", "EMA10"), ("20", "EMA20")):
+                if col in flag.columns and bar[col] == bar[col]:
+                    if abs(bar["Low"] - bar[col]) <= touch_atr * atr:
+                        touches[z] += 1
+        if max(touches.values()) > 0:
+            # prefer 10 EMA on ties (the book's best entry)
+            ema_zone = max(("10", "5", "20"), key=lambda z: touches[z])
+
+    out.update({"detected": bool(light_volume and held_gap and breakout and breakout_vol),
+                "ema_zone": ema_zone, "flag_days": int(flag_days),
+                "flag_compression_pct": round(compression, 2),
+                "breakout_volume_ratio": round(vol_ratio, 2) if vol_ratio == vol_ratio else None})
+    return out
+
+
 def detect_inside_day(df: pd.DataFrame) -> Optional[Pattern]:
     """Inside day: lower high AND higher low vs the prior bar (compression).
     Entry through the inside-day high; stop below the inside-day low (or the

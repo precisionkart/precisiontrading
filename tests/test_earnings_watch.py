@@ -59,6 +59,44 @@ def test_mark_expired_and_prune():
     assert ew.load_store() == []                                 # dropped > 90 days
 
 
+def _gap_flag_ohlcv(fill_gap=False):
+    """Synthetic: volatile pre-gap base, an earnings gap to ~60, a 15-bar
+    light-volume flag holding the gap (or filling it), then a breakout."""
+    import numpy as np
+    rows = []
+    # 40 pre-gap bars ~50, wide range (ATR ~2.5) so EMA touch windows are generous
+    for i in range(40):
+        c = 50 + 0.4 * np.sin(i / 3.0)
+        rows.append((c, c + 1.25, c - 1.25, c, 1_000_000))
+    rows.append((58.0, 61.0, 57.0, 60.0, 4_000_000))     # gap day: close 60, high 61
+    flag_low = 58.5 if fill_gap else 60.0                  # fill_gap -> dips below gap close
+    for k in range(15):                                    # light-volume flag holding ~60.3
+        c = 60.3 + 0.15 * np.sin(k / 2.0)
+        rows.append((c, 61.0, flag_low, c, 600_000))
+    rows.append((61.2, 62.5, 61.0, 62.0, 1_600_000))      # breakout: close 62 > flag high
+    idx = pd.bdate_range(end="2026-06-05", periods=len(rows))
+    df = pd.DataFrame(rows, columns=["Open", "High", "Low", "Close", "Volume"], index=idx)
+    gap_date = idx[40]                                     # the gap bar
+    return df, gap_date
+
+
+def test_detect_earnings_flag_positive():
+    from pinpoint import patterns
+    df, gap_date = _gap_flag_ohlcv(fill_gap=False)
+    res = patterns.detect_earnings_flag(df, gap_date, gap_high=61.0)
+    assert res["detected"] is True
+    assert res["ema_zone"] in ("5", "10", "20")
+    assert res["flag_days"] == 16
+    assert res["breakout_volume_ratio"] > 1.5
+
+
+def test_detect_earnings_flag_gap_fill_negative():
+    from pinpoint import patterns
+    df, gap_date = _gap_flag_ohlcv(fill_gap=True)     # flag dips below gap close
+    res = patterns.detect_earnings_flag(df, gap_date, gap_high=61.0)
+    assert res["detected"] is False                   # didn't hold the gap
+
+
 def test_active_ctx():
     d0 = date(2026, 5, 1)
     ew.persist([{"ticker": "ABC", "gap": 9.0}], ohlcv_provider=_ohlcv, today=d0)
