@@ -140,3 +140,35 @@ def test_build_earnings_down_avoid_list():
     # gap-up names must NOT appear in the avoid list
     up = set(pipeline.build_earnings(sample_data.earnings_df(), persist=False)["ticker"])
     assert up.isdisjoint(set(down["ticker"]))
+
+
+def test_rs_reference_screen_imported_and_used():
+    """Regression (Phase 9 6/7): RS_REFERENCE_SCREEN must be importable in the
+    pipeline namespace AND _inject_broad_rs must actively use the broad reference
+    — not silently NameError into the local-RS fallback."""
+    from pinpoint.config import RS_REFERENCE_SCREEN as CFG_SCREEN
+    # 1) importable in the pipeline module namespace (the regression).
+    assert getattr(pipeline, "RS_REFERENCE_SCREEN", None) == CFG_SCREEN
+
+    # 2) actively used: a fake client returns a broad reference; rs is remapped
+    # from the broad percentile and NO fallback warning is appended.
+    class _Res:
+        def __init__(self, df):
+            self.df = df; self.warnings = []; self.empty = len(df) == 0
+
+    class _Client:
+        def __init__(self, ref):
+            self.ref = ref; self.screens = []
+        def fetch_universe(self, screen, views=None):
+            self.screens.append(screen); return _Res(self.ref)
+
+    broad_raw = sample_data.universe_df()                  # normalizes to perf cols
+    universe = pipeline.normalize_universe(broad_raw)
+    client = _Client(broad_raw)
+    warnings = []
+    out = pipeline._inject_broad_rs(client, universe, warnings)
+
+    assert client.screens == [CFG_SCREEN]                  # the broad screen was pulled
+    assert not any("RS_REFERENCE_SCREEN" in w or "broad RS reference fetch failed" in w
+                   for w in warnings)                      # no NameError fallback
+    assert out["rs"].notna().any()                         # broad RS actually set

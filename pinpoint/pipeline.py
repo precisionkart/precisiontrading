@@ -24,7 +24,8 @@ import numpy as np
 import pandas as pd
 
 from .config import (CONFIG, TARGETS_SCREEN, EARNINGS_SCREEN_YESTERDAY,
-                     EARNINGS_SCREEN_TODAY, FINVIZ_SORT_QUARTER, GROWTH_FILTERS)
+                     EARNINGS_SCREEN_TODAY, FINVIZ_SORT_QUARTER, GROWTH_FILTERS,
+                     RS_REFERENCE_SCREEN)
 from .finviz_client import COLUMN_CANDIDATES, get_col, to_num, to_pct
 from . import fundamentals as fundamentals_mod
 from . import stage_trend as stage_mod
