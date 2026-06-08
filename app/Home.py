@@ -30,7 +30,7 @@ def _load_scan():
 
 
 if "scan" not in st.session_state:
-    st.session_state["scan"] = _load_scan()
+    st.session_state["scan"] = c.quarantine_synthetic(_load_scan())
 scan = st.session_state["scan"]
 
 dashboard = st.Page("views/dashboard.py", title="Dashboard",

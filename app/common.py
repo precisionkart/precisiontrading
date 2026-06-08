@@ -39,6 +39,34 @@ def regime_exposure(state: str) -> str:
     """Suggested portfolio exposure label for a regime state (Phase 10 step 7)."""
     from pinpoint.regime import EXPOSURE
     return EXPOSURE.get(state, (0.33, "One-Third"))[1]
+
+
+# Synthetic dev-only tickers (from tools/seed_earnings_flag_demo.py) that must
+# never appear in a live view unless PINPOINT_DEMO_SEED=1 is explicitly set.
+SYNTHETIC_TICKERS = {"FLAGX"}
+
+
+def quarantine_synthetic(scan: dict) -> dict:
+    """Strip known synthetic test tickers from a loaded scan's lists (Phase 10
+    guardrail). No-op in explicit demo mode; logs a tripwire warning if any are
+    found in what should be production data."""
+    if not scan or os.environ.get("PINPOINT_DEMO_SEED") == "1":
+        return scan
+    found = set()
+    for key in ("focus", "targets", "earnings", "earnings_down", "ipo"):
+        df = scan.get(key)
+        if df is None or not hasattr(df, "columns") or "ticker" not in getattr(df, "columns", []):
+            continue
+        hits = df["ticker"].astype(str).isin(SYNTHETIC_TICKERS)
+        if hits.any():
+            found |= set(df.loc[hits, "ticker"].astype(str))
+            scan[key] = df[~hits].reset_index(drop=True)
+    if found:
+        import logging
+        logging.getLogger("pinpoint").warning(
+            "quarantined synthetic ticker(s) from live scan: %s "
+            "(tripwire — a demo fixture leaked into production data)", ", ".join(sorted(found)))
+    return scan
 _CSS_PATH = os.path.join(os.path.dirname(__file__), "style.css")
 
 

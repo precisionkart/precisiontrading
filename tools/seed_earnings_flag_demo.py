@@ -1,10 +1,15 @@
-"""tools/seed_earnings_flag_demo.py — synthetic earnings-flag validation (Phase 9).
+"""tools/seed_earnings_flag_demo.py — DEV TOOL for offline test validation of the
+earnings_flag layer. Do NOT run against production scan data.
 
-Injects a name (FLAGX) that gapped up ~3 weeks ago into earnings_watch.json,
-caches a synthetic OHLCV that forms a flag-and-breakout today, grades it through
-the REAL enrich_focus, and prepends it to today's Dashboard cache so the
-earnings-flag badge + prose are visible in the UI. Also adds a couple of real
-names to the watch so the Earnings Watch page is populated.
+Injects a synthetic name (FLAGX) that gapped up ~3 weeks ago into
+earnings_watch.json, caches a synthetic OHLCV that forms a flag-and-breakout
+today, grades it through the REAL enrich_focus, and prepends it to today's
+Dashboard cache so the earnings-flag badge + prose are visible in the UI.
+
+GATED: this seeder is a no-op unless PINPOINT_DEMO_SEED=1 is set in the
+environment, so it can never accidentally pollute a real scan. The Dashboard
+also quarantines known synthetic tickers (see common.quarantine_synthetic)
+unless that same flag is set.
 """
 
 import os
@@ -39,6 +44,10 @@ def _flag_ohlcv():
 
 
 def main():
+    if os.environ.get("PINPOINT_DEMO_SEED") != "1":
+        print("seed_earnings_flag_demo: no-op (set PINPOINT_DEMO_SEED=1 to run). "
+              "This is a dev-only fixture and must never touch production data.")
+        return
     df, gap_date = _flag_ohlcv()
     # cache the synthetic OHLCV so the card chart/sparkline render
     os.makedirs(os.path.join(CONFIG.paths.data_dir, "ohlcv"), exist_ok=True)
