@@ -32,6 +32,7 @@ from . import ohlcv as ohlcv_mod
 from . import patterns as patterns_mod
 from . import entries as entries_mod
 from . import timeframes as timeframes_mod
+from . import flags as flags_mod
 from .regime import Regime, BULL
 from .rs_rating import compute_rs, PROXY_LABEL
 from .scoring import score_layers
@@ -495,6 +496,13 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
         sector = (urow.get("sector") if urow is not None else t.get("sector"))
         industry = (urow.get("industry") if urow is not None else None)
         theme_label = theme_ctx.theme_label(sector, industry) if theme_ctx else (t.get("theme") or "")
+        fl, wn = flags_mod.compute_flags(
+            d, compression_score=comp["compression_score"], slingshot=sling["detected"],
+            ef_active=ef_active, ema_zone=ef.get("ema_zone"),
+            eps_this_y=(urow.get("eps_this_y") if urow is not None else None),
+            sales_growth=(urow.get("sales_past5y") if urow is not None else None),
+            pct_below_high=(urow.get("pct_below_high") if urow is not None else None),
+            stage_label=t.get("stage"))
         rows.append({
             "ticker": ticker,
             "company": t.get("company"),
@@ -527,6 +535,8 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "spread_price_20_atr": comp["spread_price_20_atr"],
             "slingshot_active": bool(sling["detected"]),
             "slingshot_shakeout_low": sling.get("shakeout_low"),
+            "flags": fl,
+            "warnings": wn,
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
             "tier": result.tier,

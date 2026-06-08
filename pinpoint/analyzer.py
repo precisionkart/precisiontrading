@@ -25,6 +25,7 @@ from . import ohlcv as ohlcv_mod
 from . import patterns as patterns_mod
 from . import entries as entries_mod
 from . import timeframes as timeframes_mod
+from . import flags as flags_mod
 from . import pipeline
 from .rs_rating import compute_rs
 from .scoring import score_layers
@@ -108,6 +109,9 @@ class PickResult:
     # Phase 10 step 4 — slingshot reclaim.
     slingshot_active: bool = False
     slingshot_shakeout_low: Optional[float] = None
+    # Phase 10 step 5 — plain-English flags / warnings.
+    flags: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
     @property
     def is_pinpoint(self) -> bool:
@@ -370,5 +374,11 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         slingshot_active=bool(sling["detected"]),
         slingshot_shakeout_low=sling.get("shakeout_low"),
     )
+    pr.flags, pr.warnings = flags_mod.compute_flags(
+        d if have_ohlcv else None, compression_score=comp.get("compression_score", 0.0),
+        slingshot=bool(sling["detected"]), ef_active=bool(ef["detected"]),
+        ema_zone=ef.get("ema_zone"), eps_this_y=row.get("eps_this_y"),
+        sales_growth=row.get("sales_past5y"), pct_below_high=row.get("pct_below_high"),
+        stage_label=stage.label)
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr

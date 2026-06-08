@@ -1,0 +1,37 @@
+"""Tests for the plain-English flags/warnings (Phase 10 step 5)."""
+
+import numpy as np
+import pandas as pd
+
+from pinpoint import ohlcv as ohlcv_mod
+from pinpoint.flags import compute_flags
+
+
+def _ma(df):
+    return ohlcv_mod.add_moving_averages(df)
+
+
+def test_flags_positive_set():
+    # tight, stacked, light-volume name + triple-digit growth + earnings gap
+    close = pd.Series(100 + np.sin(np.arange(60) / 8.0) * 0.4)
+    vol = np.array([1e6] * 55 + [3e5] * 5)              # dry-up in the last 5 bars
+    df = _ma(pd.DataFrame({"Open": close, "High": close + 0.3, "Low": close - 0.3,
+                           "Close": close, "Volume": vol}))
+    flags, warns = compute_flags(df, compression_score=24.0, slingshot=True,
+                                 ef_active=True, eps_this_y=120.0, pct_below_high=1.0)
+    assert "🎯 Slingshot" in flags
+    assert "Tight Coil" in flags
+    assert "Triple-Digit Growth" in flags
+    assert "Fresh Earnings Gap" in flags
+    assert "Volume Dry-Up" in flags
+    assert "Loose" not in warns
+
+
+def test_warnings_extended_and_loose():
+    close = pd.Series(np.linspace(100, 170, 60))        # steep -> fanned + extended
+    df = _ma(pd.DataFrame({"Open": close, "High": close + 0.5, "Low": close - 0.5,
+                           "Close": close, "Volume": [1e6] * 60}))
+    flags, warns = compute_flags(df, compression_score=4.0, pct_below_high=9.0)
+    assert "Loose" in warns
+    assert "9% from highs" in warns
+    assert "Tight Coil" not in flags

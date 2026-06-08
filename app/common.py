@@ -253,7 +253,28 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
     <div class='pp-cell'><div class='k'>R:R</div><div class='v'>{_fmt(row.get('reward_risk'),1)}:1</div></div>
   </div>
   {atr_readout_html(row)}
+  {flags_warnings_html(row)}
 </div>""", unsafe_allow_html=True)
+
+
+def flags_warnings_html(row) -> str:
+    """Two-column ✓ Flags (green) / ⚠ Warnings (amber) block (Phase 10 step 5)."""
+    def _items(v):
+        if v is None:
+            return []
+        try:
+            return [str(x) for x in list(v) if str(x)]
+        except TypeError:
+            return []
+    flags, warns = _items(row.get("flags")), _items(row.get("warnings"))
+    if not flags and not warns:
+        return ""
+    fl = "".join(f"<li>{_html.escape(x)}</li>" for x in flags) or "<li class='none'>—</li>"
+    wn = "".join(f"<li>{_html.escape(x)}</li>" for x in warns) or "<li class='none'>—</li>"
+    return (f"<div class='pp-fw'>"
+            f"<div class='pp-fw-col flags'><div class='h'>✓ Flags</div><ul>{fl}</ul></div>"
+            f"<div class='pp-fw-col warns'><div class='h'>⚠ Warnings</div><ul>{wn}</ul></div>"
+            f"</div>")
 
 
 def atr_readout_html(row) -> str:
