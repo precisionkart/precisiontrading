@@ -219,6 +219,22 @@ verified accurate; only the cell *format* changed.
   toward the day's momentum movers, which deflated normal names' RS. It now uses
   `RS_REFERENCE_SCREEN` (price > $10, avg vol ≥ 300k, near-high — **no RVOL
   gate**), a ~hundreds-of-names pull. (Test: `tests/test_rs_reference.py`.)
+- **Earnings-flag EMA zone reads "5" on a fresh breakout (Phase 9).** The book
+  treats the 10 EMA as the textbook flag-reaction zone, but a *just-broken-out*
+  tight flag still hugs the 5 EMA — that's faithful, not a bug. The matured-flag
+  10/20 zones surface on names that consolidated longer. `detect_earnings_flag`
+  reports the measured zone; tests assert `ema_zone in (5,10,20)` rather than
+  pinning one.
+- **Industry-RS gate only fires when industry ranks are present (Phase 9).** The
+  top-10% industry gate is enforced on live/publish runs (which carry Finviz
+  industry data); the read-only cloud path reads already-gated published targets
+  and the offline cache path skips the gate rather than dropping every name.
+  `--no-industry-gate` bypasses it for diagnostics.
+- **RS-universe consistency via injection, not refetch (Phase 9).** `build_targets`
+  keeps the RVOL-gated `TARGETS_SCREEN` for *membership* but ranks RS over the
+  broad `RS_REFERENCE_SCREEN` (matching My-Picks/cloud) by injecting a
+  precomputed broad-RS column; it recomputes locally only if none is supplied.
+  Costs ~1 min of performance-view fetch on a live local run.
 
 ## Requirements
 
