@@ -43,7 +43,7 @@ def regime_exposure(state: str) -> str:
 
 # Synthetic dev-only tickers (from tools/seed_earnings_flag_demo.py) that must
 # never appear in a live view unless PINPOINT_DEMO_SEED=1 is explicitly set.
-SYNTHETIC_TICKERS = {"FLAGX"}
+SYNTHETIC_TICKERS = {"FLAGX", "ELITEX", "WATCHX", "BADX", "DUMPX"}
 
 
 def quarantine_synthetic(scan: dict) -> dict:
@@ -583,6 +583,15 @@ def render_detail_inline(pr) -> None:
 
         # 2) plain-English explanation
         st.markdown(f"<div class='pp-explain'>{dl.setup_explanation(pr)}</div>",
+                    unsafe_allow_html=True)
+
+        # 2b) ATR compression readout + flags/warnings (Phase 10 steps 3/5)
+        _cardrow = {"atr_14": pr.atr_14, "compression_score": pr.compression_score,
+                    "spread_5_10_atr": pr.spread_5_10_atr,
+                    "spread_10_20_atr": pr.spread_10_20_atr,
+                    "spread_price_20_atr": pr.spread_price_20_atr,
+                    "flags": pr.flags, "warnings": pr.warnings}
+        st.markdown(atr_readout_html(_cardrow) + flags_warnings_html(_cardrow),
                     unsafe_allow_html=True)
 
         # 3) the criteria checklist (supporting role)

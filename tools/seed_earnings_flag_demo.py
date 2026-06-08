@@ -90,8 +90,32 @@ def main():
     if os.path.exists(fpath):
         existing = pd.read_parquet(fpath)
         existing = existing[existing["ticker"] != "FLAGX"]      # idempotent re-seed
-        combined = pd.concat([focus_efx, existing], ignore_index=True)
+        # synthetic Tier-1 (Elite, glow) and Tier-3 (Watchlist) names so all
+        # three tiers populate for the screenshot (demo-only, quarantined live).
+        elite = dict(focus_efx.iloc[0])
+        elite.update(ticker="ELITEX", company="Elite Demo", sector="Technology",
+                     pinpoint_score=88.0, tier="Elite", rs=98.0,
+                     pattern="Flat base breakout", earnings_flag_active=False,
+                     slingshot_active=True, reward_risk=7.2,
+                     flags=["Tight Coil", "🎯 Slingshot", "Triple-Digit Growth"],
+                     warnings=[], compression_score=24.0)
+        watch = dict(focus_efx.iloc[0])
+        watch.update(ticker="WATCHX", company="Watch Demo", sector="Industrials",
+                     pinpoint_score=57.0, tier="Watchlist", rs=83.0,
+                     pattern="Inside day", earnings_flag_active=False,
+                     slingshot_active=False, reward_risk=4.1,
+                     flags=["Volume Dry-Up"], warnings=["Extended", "MAs not stacked"],
+                     compression_score=12.0)
+        combined = pd.concat([pd.DataFrame([elite]), focus_efx,
+                              pd.DataFrame([watch]), existing], ignore_index=True)
         combined.to_parquet(fpath)
+        # synthetic gap-DOWN earnings list so the AVOID panel populates
+        down = pd.DataFrame([
+            {"ticker": "BADX", "company": "Bad Earnings", "sector": "Technology",
+             "price": 41.2, "gap": -8.4, "change": -9.1, "rs": 34.0, "eps_this_y": -12.0},
+            {"ticker": "DUMPX", "company": "Dump Co", "sector": "Healthcare",
+             "price": 22.7, "gap": -5.2, "change": -6.0, "rs": 41.0, "eps_this_y": 8.0}])
+        down.to_parquet(os.path.join(cdir, "earnings_down.parquet"))
         # stamp the cache date to today so the dashboard renders it (demo only)
         import json
         mpath = os.path.join(cdir, "meta.json")
