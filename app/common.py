@@ -252,7 +252,24 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
     <div class='pp-cell'><div class='k'>Target</div><div class='v'>${_fmt(target)}</div></div>
     <div class='pp-cell'><div class='k'>R:R</div><div class='v'>{_fmt(row.get('reward_risk'),1)}:1</div></div>
   </div>
+  {atr_readout_html(row)}
 </div>""", unsafe_allow_html=True)
+
+
+def atr_readout_html(row) -> str:
+    """ATR-normalized compression line for the expanded card (Phase 10 step 3)."""
+    atr = row.get("atr_14")
+    if atr is None or atr != atr:
+        return ""
+    def _a(k):
+        v = row.get(k)
+        return f"{abs(v):.2f}" if isinstance(v, (int, float)) and v == v else "—"
+    cs = row.get("compression_score")
+    cs_txt = f" · coil {cs:.0f}/25" if isinstance(cs, (int, float)) and cs == cs else ""
+    return (f"<div class='pp-atr'>ATR(14): ${atr:.2f} &nbsp;|&nbsp; "
+            f"5-10: {_a('spread_5_10_atr')} ATR &nbsp;|&nbsp; "
+            f"10-20: {_a('spread_10_20_atr')} ATR &nbsp;|&nbsp; "
+            f"Price-to-20: {_a('spread_price_20_atr')} ATR{cs_txt}</div>")
 
 
 def _pill_label(pill: str, rr) -> str:

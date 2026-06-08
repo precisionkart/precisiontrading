@@ -119,7 +119,8 @@ class ScoreResult:
 
 
 def score_layers(layers: dict[str, bool],
-                 weights: LayerWeights | None = None) -> ScoreResult:
+                 weights: LayerWeights | None = None,
+                 partials: dict[str, float] | None = None) -> ScoreResult:
     """Compute the 0-100 pinpoint_score from a dict of fired layer flags.
 
     The base (LAYER_NAMES) raw weights sum to BASE_TOTAL and are normalized to
@@ -127,10 +128,15 @@ def score_layers(layers: dict[str, bool],
     SCORE_MAX. `layers` may include the base/bonus flags and the PREREQUISITES
     (bool; default True — prerequisites only disqualify when an upstream module
     explicitly sets them False).
+
+    `partials` lets a layer contribute a CONTINUOUS raw value in [0, weight]
+    instead of all-or-nothing — used by the ATR-normalized Compression module
+    (Phase 10 step 3), which passes a 0-25 `tight_contraction` score.
     """
     weights = weights or CONFIG.layers
     wd = weights.as_dict()
     bd = weights.bonus_dict()
+    partials = partials or {}
 
     # Prerequisite gate.
     disq_reasons: list[str] = []
@@ -146,8 +152,14 @@ def score_layers(layers: dict[str, bool],
     contributions: dict[str, float] = {}
     base_raw = 0.0
     for name in LAYER_NAMES:
-        if layers.get(name, False):
-            w = wd.get(name, 0.0)
+        w = wd.get(name, 0.0)
+        if name in partials:
+            raw = max(0.0, min(w, float(partials[name])))
+            if raw > 0:
+                fired.append(name)
+                contributions[name] = round(raw * _NORMALIZE, 2)
+                base_raw += raw
+        elif layers.get(name, False):
             fired.append(name)
             contributions[name] = round(w * _NORMALIZE, 2)     # normalized points
             base_raw += w

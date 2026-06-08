@@ -455,7 +455,8 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             continue
 
         cont = timeframes_mod.continuity(daily)
-        contraction = ohlcv_mod.emas_converged(d)
+        comp = patterns_mod.atr_compression(d)             # ATR-normalized (step 3)
+        contraction = comp["compression_score"] > 0
         # beach-ball needs the index series + beta.
         beta = float(uni_by_ticker.get(ticker, {}).get("beta", np.nan)) if uni_by_ticker else np.nan
         bb_fired = False
@@ -481,7 +482,8 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "reward_risk": bool(setup.rr_ok),
             "earnings_flag": ef_active,
         })
-        result = score_layers(base_layers)
+        result = score_layers(base_layers,
+                              partials={"tight_contraction": comp["compression_score"]})
         if result.disqualified:
             continue
         if ef_active:
@@ -515,6 +517,11 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "earnings_flag_ema_zone": ef.get("ema_zone"),
             "gap_date": ew_entry.get("gap_date") if ew_entry else None,
             "gap_pct": ew_entry.get("gap_pct") if ew_entry else None,
+            "atr_14": comp["atr_14"],
+            "compression_score": comp["compression_score"],
+            "spread_5_10_atr": comp["spread_5_10_atr"],
+            "spread_10_20_atr": comp["spread_10_20_atr"],
+            "spread_price_20_atr": comp["spread_price_20_atr"],
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
             "tier": result.tier,

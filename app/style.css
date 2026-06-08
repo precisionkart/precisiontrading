@@ -173,4 +173,5 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-cell .k { color:var(--gray); font-size:10px; text-transform:uppercase; letter-spacing:0.05em; }
 .pp-cell .v { font-size:17px; font-weight:600; font-family:'Geist Mono',monospace; margin-top:2px; }
 .pp-cell .v.green { color: var(--up); } .pp-cell .v.red { color: var(--down); }
+.pp-atr { margin-top:8px; font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); letter-spacing:0.01em; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

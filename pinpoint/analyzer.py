@@ -99,6 +99,12 @@ class PickResult:
     earnings_flag_ema_zone: Optional[str] = None
     gap_date: Optional[str] = None
     gap_pct: Optional[float] = None
+    # Phase 10 step 3 — ATR-normalized compression readout.
+    atr_14: Optional[float] = None
+    compression_score: Optional[float] = None
+    spread_5_10_atr: Optional[float] = None
+    spread_10_20_atr: Optional[float] = None
+    spread_price_20_atr: Optional[float] = None
 
     @property
     def is_pinpoint(self) -> bool:
@@ -273,9 +279,10 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         if index_close is not None:
             beta = float(row.get("beta", np.nan))
             bb = stage_mod.beach_ball_residual(d["Close"], index_close, beta=beta).is_beach_ball
+        comp = patterns_mod.atr_compression(d)             # ATR-normalized (step 3)
         base_layers.update({
             "valid_pattern": pat is not None,
-            "tight_contraction": ohlcv_mod.emas_converged(d),
+            "tight_contraction": comp["compression_score"] > 0,
             "correct_ma_reaction": pipeline._riding_mas(d),
             "support_resistance_flip": pipeline._sr_flip(d),
             "timeframe_continuity": cont.aligned,
@@ -283,7 +290,12 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
             "reward_risk": bool(rr is not None and rr >= CONFIG.entry.min_reward_risk),
             "earnings_flag": bool(ef["detected"]),
         })
-    result = score_layers(base_layers)
+    else:
+        comp = {"atr_14": float("nan"), "compression_score": 0.0,
+                "spread_5_10_atr": float("nan"), "spread_10_20_atr": float("nan"),
+                "spread_price_20_atr": float("nan")}
+    result = score_layers(base_layers,
+                          partials={"tight_contraction": comp["compression_score"]})
 
     theme_label = theme_ctx.theme_label(sector, industry) if theme_ctx else ""
     growth = fundamentals_mod.assess_row(row)
@@ -345,6 +357,10 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         earnings_flag_ema_zone=ef.get("ema_zone"),
         gap_date=(ew_entry.get("gap_date") if ew_entry else None),
         gap_pct=(ew_entry.get("gap_pct") if ew_entry else None),
+        atr_14=comp.get("atr_14"), compression_score=comp.get("compression_score"),
+        spread_5_10_atr=comp.get("spread_5_10_atr"),
+        spread_10_20_atr=comp.get("spread_10_20_atr"),
+        spread_price_20_atr=comp.get("spread_price_20_atr"),
     )
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr

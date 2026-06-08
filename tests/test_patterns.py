@@ -126,3 +126,28 @@ def test_ema_reclaim_positive():
 def test_flag_negative_no_pole():
     flat = _ma(_flat(n=40))
     assert detect_flag(flat) is None
+
+
+def test_atr_compression_tight_coil():
+    """Converged EMAs within <0.5 ATR -> Tight Coil band (22-25)."""
+    import numpy as np
+    from pinpoint.patterns import atr_compression
+    # gentle drift so 5/10/20 EMAs sit on top of each other, small ATR
+    close = pd.Series(100 + np.sin(np.arange(60) / 8.0) * 0.4)
+    df = pd.DataFrame({"Open": close, "High": close + 0.3, "Low": close - 0.3,
+                       "Close": close, "Volume": [1e6] * 60})
+    c = atr_compression(df)
+    assert c["atr_14"] > 0
+    assert c["compression_score"] >= 22.0          # Tight Coil
+    assert abs(c["spread_10_20_atr"]) < 0.5
+
+
+def test_atr_compression_loose():
+    """Strongly fanned EMAs -> Loose band (<=7)."""
+    import numpy as np
+    from pinpoint.patterns import atr_compression
+    close = pd.Series(np.linspace(100, 160, 60))   # steep trend -> wide MA spread
+    df = pd.DataFrame({"Open": close, "High": close + 0.5, "Low": close - 0.5,
+                       "Close": close, "Volume": [1e6] * 60})
+    c = atr_compression(df)
+    assert c["compression_score"] <= 7.0

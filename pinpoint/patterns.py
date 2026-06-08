@@ -99,6 +99,62 @@ def _volume_dryup(df: pd.DataFrame, window: int) -> bool:
     return bool(recent < prior) if prior and prior == prior else False
 
 
+def atr(df: pd.DataFrame, period: int = 14) -> float:
+    """Average True Range over the last `period` bars (Wilder's TR mean). NaN if
+    insufficient data."""
+    if df is None or len(df) < 2 or not {"High", "Low", "Close"} <= set(df.columns):
+        return float("nan")
+    high, low, close = df["High"], df["Low"], df["Close"]
+    prev_close = close.shift(1)
+    tr = pd.concat([(high - low).abs(),
+                    (high - prev_close).abs(),
+                    (low - prev_close).abs()], axis=1).max(axis=1)
+    tail = tr.iloc[-period:]
+    return float(tail.mean()) if len(tail) else float("nan")
+
+
+def atr_compression(df: pd.DataFrame, period: int = 14) -> dict:
+    """ATR-normalized EMA compression (Phase 10 step 3). Replaces the binary
+    `emas_converged` with a continuous 0-25 score driving the Compression module.
+
+    Returns the ATR(14), the three EMA/price spreads expressed in ATR units, and
+    `compression_score` 0-25. Banding (governed by the LOOSEST of the three
+    spreads, since one fanned-out MA breaks the coil):
+        all spreads < 0.5 ATR  -> 22-25  ("Tight Coil")
+        all spreads < 1.0 ATR  -> 15-21  ("Coiled")
+        score 8-14             -> neutral (no flag / no warning)
+        score 0-7              -> "Loose"
+    """
+    from . import ohlcv as ohlcv_mod
+    out = {"atr_14": float("nan"), "spread_5_10_atr": float("nan"),
+           "spread_10_20_atr": float("nan"), "spread_price_20_atr": float("nan"),
+           "compression_score": 0.0}
+    d = ohlcv_mod.add_moving_averages(df) if df is not None and len(df) else df
+    if d is None or len(d) == 0 or not all(c in d.columns for c in ("EMA5", "EMA10", "EMA20")):
+        return out
+    a = atr(d, period)
+    last = d.iloc[-1]
+    if not a or a != a or a <= 0 or last["Close"] <= 0:
+        return out
+    s_5_10 = (last["EMA5"] - last["EMA10"]) / a
+    s_10_20 = (last["EMA10"] - last["EMA20"]) / a
+    s_px_20 = (last["Close"] - last["EMA20"]) / a
+    out.update(atr_14=round(a, 4), spread_5_10_atr=round(s_5_10, 3),
+               spread_10_20_atr=round(s_10_20, 3), spread_price_20_atr=round(s_px_20, 3))
+
+    m = max(abs(s_5_10), abs(s_10_20), abs(s_px_20))      # loosest spread governs
+    if m < 0.5:
+        score = 22.0 + (0.5 - m) / 0.5 * 3.0              # 22..25
+    elif m < 1.0:
+        score = 15.0 + (1.0 - m) / 0.5 * 6.0              # 15..21
+    elif m < 2.0:
+        score = 8.0 + (2.0 - m) / 1.0 * 6.0               # 8..14
+    else:
+        score = 8.0 - (m - 2.0) * 4.0                     # 8..0 then clamp
+    out["compression_score"] = round(max(0.0, min(25.0, score)), 1)
+    return out
+
+
 # Continuation patterns project the PRIOR ADVANCE (the up-leg that preceded the
 # consolidation) from the breakout — a generalized "flagpole" — per the user's
 # measured-move decision. The leg lookback is bounded so it's the recent advance,
