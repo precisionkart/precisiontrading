@@ -181,4 +181,13 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-fw-col.flags li { color:var(--up); background:rgba(0,217,100,0.10); }
 .pp-fw-col.warns li { color:#B26A00; background:rgba(255,138,0,0.12); }
 .pp-fw-col li.none { color:var(--gray); background:transparent; }
+/* Tiered output (step 6) */
+.pp-tiercount { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); margin:4px 0 10px; }
+.pp-row.tier1 { box-shadow:0 0 0 1px rgba(0,217,100,0.55), 0 0 14px rgba(0,217,100,0.20); border-color:rgba(0,217,100,0.55); }
+.pp-row .score.e { color:var(--up); font-weight:700; }
+.pp-row .score.g { color:#1F9E5A; }
+.pp-row .score.w { color:var(--gray); }
+.pp-tierpills { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+.pp-tierpill { font-family:'Geist Mono',monospace; font-size:12px; color:var(--ink); background:var(--panel,#F4F5F6); border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
+.pp-tierpill b { color:var(--gray); font-weight:600; margin-left:6px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

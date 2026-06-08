@@ -441,15 +441,22 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
         chg_html = f"<span class='chg {cls}'>{arrow} {abs(chg):.1f}%</span>"
     else:
         chg_html = ""
-    score_txt = f"{score:.1f}" if isinstance(score, (int, float)) and score == score else "—"
+    score_txt = f"{score:.0f}" if isinstance(score, (int, float)) and score == score else "—"
     rr_txt = f"{rr:.1f}:1" if isinstance(rr, (int, float)) and rr == rr else "—"
     src_cls = "focus" if src == "Focus" else ""
-    return (f"<div class='pp-row' id='pp-card-{tk}'>"
+    # score gradient on the 0-100 scale (midpoint 50, strong at 80).
+    s_cls = ""
+    row_cls = "pp-row"
+    if isinstance(score, (int, float)) and score == score:
+        s_cls = "e" if score >= 80 else "g" if score >= 65 else "w" if score >= 50 else ""
+        if score >= 80:
+            row_cls = "pp-row tier1"
+    return (f"<div class='{row_cls}' id='pp-card-{tk}'>"
             f"<span class='tk'>{tk}</span>"
             f"<span class='px'>{px} {chg_html}</span>"
             f"<span class='spark'>{spark}</span>"
             f"{rs_chip_html(row.get('RS'))}"
-            f"<span class='score'>{score_txt}</span>"
+            f"<span class='score {s_cls}'>{score_txt}</span>"
             f"<span class='pat'>{pat}</span>"
             f"<span class='rr'>{rr_txt}</span>"
             f"<span class='sect'>{sect}</span>"

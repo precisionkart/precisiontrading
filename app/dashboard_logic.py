@@ -93,6 +93,19 @@ def build_top10(focus: Optional[pd.DataFrame], targets: Optional[pd.DataFrame],
     return df[TOP10_COLUMNS]
 
 
+def build_tiers(focus, targets, sector_filter=None):
+    """All ranked names with a Tier label (Phase 10 step 6): Elite 80+, Good
+    65-79, Watchlist 50-64. Names below 50 are dropped from the tiered view."""
+    from pinpoint.scoring import tier as _tier_of
+    df = build_top10(focus, targets, sector_filter, n=500)
+    if len(df) == 0:
+        return df.assign(Tier=[])
+    df = df.copy()
+    df["Tier"] = df["Score"].map(
+        lambda s: _tier_of(float(s)) if s is not None and s == s else None)
+    return df[df["Tier"].notna()].reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Sector strength (with change vs the most recent prior history entry).
 # ---------------------------------------------------------------------------

@@ -73,13 +73,38 @@ def detail_fn(tk: str):
     return cache[key]
 
 
-# ---- Top 10 compact cards ----
-st.markdown("<div class='pp-section'>Top 10 — Focus + Watch</div>", unsafe_allow_html=True)
-if len(top10) == 0:
-    st.markdown("<div class='pp-empty'>No ranked names.</div>", unsafe_allow_html=True)
-for i, (_, row) in enumerate(top10.iterrows()):
-    c.compact_card(row.to_dict(), detail_fn, key=f"card{i}",
-                   ef=str(row.get("Ticker")) in ef_tickers)
+# ---- Tiered output (Phase 10 step 6) ----
+tiers = dl.build_tiers(scan.get("focus"), scan.get("targets"), sector_filter)
+t1 = tiers[tiers["Tier"] == "Elite"]
+t2 = tiers[tiers["Tier"] == "Good"]
+t3 = tiers[tiers["Tier"] == "Watchlist"]
+_tgt = scan.get("targets")
+scanned = max(len(_tgt) if _tgt is not None else 0, len(tiers))  # ranked universe size
+st.markdown(
+    f"<div class='pp-tiercount'>Ranked {scanned} · 🔥 Tier 1: {len(t1)} · "
+    f"⚡ Tier 2: {len(t2)} · 👀 Tier 3: {len(t3)}</div>", unsafe_allow_html=True)
+
+if len(tiers) == 0:
+    st.markdown("<div class='pp-empty'>No names scored 50+.</div>", unsafe_allow_html=True)
+
+_ci = 0
+if len(t1):
+    st.markdown("<div class='pp-section'>🔥 Tier 1 — Elite (80-100)</div>", unsafe_allow_html=True)
+    for _, row in t1.iterrows():
+        c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
+                       ef=str(row.get("Ticker")) in ef_tickers); _ci += 1
+if len(t2):
+    st.markdown("<div class='pp-section'>⚡ Tier 2 — Good Setups (65-79)</div>", unsafe_allow_html=True)
+    for _, row in t2.iterrows():
+        c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
+                       ef=str(row.get("Ticker")) in ef_tickers); _ci += 1
+if len(t3):
+    st.markdown("<div class='pp-section'>👀 Tier 3 — Watchlist (50-64)</div>", unsafe_allow_html=True)
+    pills = "".join(
+        f"<span class='pp-tierpill'>{c._html.escape(str(r.get('Ticker')))}"
+        f"<b>{r.get('Score'):.0f}</b></span>"
+        for _, r in t3.iterrows())
+    st.markdown(f"<div class='pp-tierpills'>{pills}</div>", unsafe_allow_html=True)
 c.scroll_to_card()   # smooth-scroll to a card opened from the podium
 
 # ---- Sector treemap ----
