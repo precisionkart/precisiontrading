@@ -83,6 +83,13 @@ def main():
         existing = existing[existing["ticker"] != "FLAGX"]      # idempotent re-seed
         combined = pd.concat([focus_efx, existing], ignore_index=True)
         combined.to_parquet(fpath)
+        # stamp the cache date to today so the dashboard renders it (demo only)
+        import json
+        mpath = os.path.join(cdir, "meta.json")
+        if os.path.exists(mpath):
+            meta = json.load(open(mpath))
+            meta["date"] = date.today().isoformat()
+            json.dump(meta, open(mpath, "w"), indent=2)
         print("prepended FLAGX to focus cache:", len(combined), "rows")
     else:
         print("no focus cache — run tools/seed_dashboard.py first")
