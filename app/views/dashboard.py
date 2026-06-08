@@ -33,6 +33,12 @@ sub = f"{len(top10)} names · {n_hot} sectors hot"
 if sector_filter:
     sub += f" · filtered: {sector_filter}"
 st.markdown(f"<div class='pp-sub'>{sub}</div>", unsafe_allow_html=True)
+_rstate = scan["regime"].state if scan.get("regime") else "neutral"
+st.markdown(
+    f"<div class='pp-exposure'>📊 Suggested portfolio exposure (regime "
+    f"<b>{_rstate.upper()}</b>): <b>{c.regime_exposure(_rstate)}</b> "
+    f"<span class='note'>— a suggestion, not a prescription; you size the trade.</span></div>",
+    unsafe_allow_html=True)
 c.warning_banner(scan.get("warnings"))
 
 # ---- Top 3 Podium (Focus-source only; hidden entirely when 0 Focus) ----

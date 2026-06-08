@@ -68,12 +68,24 @@ def test_regime_bear_when_below_200():
     assert not reads.is_on
 
 
-def test_regime_neutral_when_losing_20():
+def test_regime_neutral_bear_when_losing_20():
+    # 5-state (Phase 10 step 7): above 200 but below the 20 -> neutral-bear.
     reads = rg.from_fundaments({
         "SPY": {"SMA20": "-1%", "SMA50": "2%", "SMA200": "8%"},
         "QQQ": {"SMA20": "-0.5%", "SMA50": "3%", "SMA200": "10%"}})
-    assert reads.state == "neutral"
-    assert reads.is_on            # neutral still allows throttled longs
+    assert reads.state == "neutral-bear"
+    assert reads.is_on                       # still allows throttled longs
+    assert reads.exposure_label == "One-Third"
+
+
+def test_regime_very_bear_when_below_all_with_ema_cross():
+    reads = {"SPY": rg.BenchmarkRead("SPY", above_sma200=False, above_sma50=False,
+                                     above_sma20=False, sma20_pct=-3, sma50_pct=-5,
+                                     sma200_pct=-8, ema10_above_ema20=False)}
+    r = rg.classify(reads)
+    assert r.state == "very-bear"
+    assert r.exposure_label == "Cash" and r.exposure_pct == 0.0
+    assert not r.is_on
 
 
 def test_regime_unknown_defaults_neutral():

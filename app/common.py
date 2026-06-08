@@ -31,7 +31,14 @@ from pinpoint import charts                           # noqa: E402
 from pinpoint.config import CONFIG                    # noqa: E402
 from pinpoint.finviz_client import FinvizClient       # noqa: E402
 
-_REGIME_COLOR = {"bull": "#16A34A", "neutral": "#737373", "bear": "#DC2626"}
+_REGIME_COLOR = {"bull": "#16A34A", "neutral-bull": "#16A34A", "neutral": "#737373",
+                 "neutral-bear": "#CA8A04", "bear": "#DC2626", "very-bear": "#111111"}
+
+
+def regime_exposure(state: str) -> str:
+    """Suggested portfolio exposure label for a regime state (Phase 10 step 7)."""
+    from pinpoint.regime import EXPOSURE
+    return EXPOSURE.get(state, (0.33, "One-Third"))[1]
 _CSS_PATH = os.path.join(os.path.dirname(__file__), "style.css")
 
 

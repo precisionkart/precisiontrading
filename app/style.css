@@ -190,4 +190,6 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-tierpills { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
 .pp-tierpill { font-family:'Geist Mono',monospace; font-size:12px; color:var(--ink); background:var(--panel,#F4F5F6); border:1px solid var(--border); border-radius:999px; padding:3px 10px; }
 .pp-tierpill b { color:var(--gray); font-weight:600; margin-left:6px; }
+.pp-exposure { font-size:13px; color:var(--ink); margin:6px 0 2px; }
+.pp-exposure .note { color:var(--gray); font-size:11px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
