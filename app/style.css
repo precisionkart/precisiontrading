@@ -192,4 +192,7 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-tierpill b { color:var(--gray); font-weight:600; margin-left:6px; }
 .pp-exposure { font-size:13px; color:var(--ink); margin:6px 0 2px; }
 .pp-exposure .note { color:var(--gray); font-size:11px; }
+.pp-eh { font-weight:700; font-size:13px; margin:4px 0 8px; }
+.pp-eh.down { color:var(--down); } .pp-eh.up { color:var(--up); }
+.pp-row .eps { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); margin-left:8px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

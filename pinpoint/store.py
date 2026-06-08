@@ -127,7 +127,7 @@ def load_universe_snapshot() -> tuple[Optional[pd.DataFrame], Optional[str]]:
 # ---------------------------------------------------------------------------
 # Scan cache (instant Morning Dashboard).
 # ---------------------------------------------------------------------------
-_CACHE_LISTS = ("focus", "targets", "earnings", "ipo")
+_CACHE_LISTS = ("focus", "targets", "earnings", "earnings_down", "ipo")
 
 
 @dataclass

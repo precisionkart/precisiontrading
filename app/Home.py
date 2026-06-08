@@ -24,7 +24,8 @@ def _load_scan():
     return {"regime": c.RegimeView(cache.regime_state, cache.regime_rationale),
             "theme_ctx": None, "themes": cache.themes,
             "focus": cache.lists.get("focus"), "targets": cache.lists.get("targets"),
-            "earnings": cache.lists.get("earnings"), "ipo": cache.lists.get("ipo"),
+            "earnings": cache.lists.get("earnings"),
+            "earnings_down": cache.lists.get("earnings_down"), "ipo": cache.lists.get("ipo"),
             "as_of": cache.as_of, "warnings": []}
 
 

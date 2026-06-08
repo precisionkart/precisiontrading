@@ -134,24 +134,17 @@ if (new_filter or None) != (sector_filter or None):
     st.session_state["sector_filter"] = new_filter
     st.rerun()
 
-# ---- Earnings (compact rows) ----
+# ---- Earnings reactions — both directions (Phase 10 step 8) ----
+universe_tks = set()
+_t = scan.get("targets")
+if _t is not None and len(_t) and "ticker" in _t.columns:
+    universe_tks = set(_t["ticker"].astype(str))
 st.markdown("<div class='pp-section'>Overnight Earnings Reactions</div>", unsafe_allow_html=True)
-earn = scan.get("earnings")
-if earn is None or len(earn) == 0:
-    st.markdown("<div class='pp-empty'>No gapped-up earnings reactions.</div>", unsafe_allow_html=True)
-else:
-    rows_html = []
-    for _, r in earn.iterrows():
-        gap = r.get("gap")
-        gtxt = f"+{gap:.1f}%" if isinstance(gap, (int, float)) and gap == gap else "—"
-        rows_html.append(
-            f"<div class='pp-row'><span class='tk'>{r.get('ticker','')}</span>"
-            f"<span class='px'>${r.get('price'):,.2f}</span>"
-            f"<span class='score' style='color:#00D964;width:70px'>{gtxt}</span>"
-            f"{c.rs_chip_html(r.get('rs'))}"
-            f"<span class='pat'>earnings flag — watch for the light-volume flag</span></div>")
-    st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
-                + "".join(rows_html) + "</div>", unsafe_allow_html=True)
+ecol1, ecol2 = st.columns(2)
+with ecol1:
+    c.earnings_panel(scan.get("earnings"), "📈 Gapping Up", "up", universe_tks)
+with ecol2:
+    c.earnings_panel(scan.get("earnings_down"), "📉 Gapping Down (AVOID)", "down", universe_tks)
 
 # (Dashboard ends at Earnings — the watchlist lives on its own sidebar page.)
 c.disclaimer_footer()

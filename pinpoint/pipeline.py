@@ -329,7 +329,7 @@ def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
     if len(out):
         out = out.sort_values("rs", ascending=False, na_position="last").reset_index(drop=True)
         if persist:
-            ew.housekeeping()                          # expire + prune
+            ew.housekeeping()                          # expire + prune (gap-up only)
             ew.persist([{"ticker": r["ticker"], "gap": r["gap"], "sector": r["sector"],
                          "theme": ""} for _, r in out.iterrows()])
             # "tracked since" = days the name has been on the watch
@@ -339,6 +339,38 @@ def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
                 gd = ew._parse(store.get(tk, {}).get("gap_date"))
                 return (today - gd).days if gd else 0
             out["tracked_days"] = out["ticker"].map(_since)
+    return out
+
+
+def build_earnings_down(raw: pd.DataFrame) -> pd.DataFrame:
+    """Earnings gap-DOWN list (Phase 10 step 8) — names that gapped down AND
+    closed down on their report. These are AVOID signals (broken support /
+    distribution), NOT trade candidates: surfaced so the user can steer clear and
+    spot sympathy weakness. Ranked most-negative gap first. Not persisted."""
+    universe = normalize_universe(raw)
+    if len(universe) == 0:
+        return pd.DataFrame()
+    g = CONFIG.gates
+    perf = universe[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
+                     if c in universe.columns]]
+    universe = universe.copy()
+    universe["rs"] = compute_rs(perf) if len(perf.columns) else np.nan
+    rows = []
+    for _, row in universe.iterrows():
+        price, avgv = row.get("price", np.nan), row.get("avg_volume", np.nan)
+        gap, change = row.get("gap", np.nan), row.get("change", np.nan)
+        if not (price > g.min_price) or not (avgv >= g.min_avg_volume):
+            continue
+        if not (gap == gap and change == change and gap < 0 and change < 0):
+            continue                                   # require gap-down AND closed down
+        rows.append({"ticker": row["ticker"], "company": row["company"],
+                     "sector": row["sector"], "price": price, "gap": gap,
+                     "change": change, "rs": row.get("rs", np.nan),
+                     "eps_this_y": row.get("eps_this_y", np.nan),
+                     "setup": "AVOID — gapped down on earnings (broken support)"})
+    out = pd.DataFrame(rows)
+    if len(out):
+        out = out.sort_values("gap", ascending=True, na_position="last").reset_index(drop=True)
     return out
 
 
@@ -563,6 +595,7 @@ class LiveResult:
     df: pd.DataFrame
     warnings: list[str] = field(default_factory=list)
     ok: bool = True
+    down: pd.DataFrame | None = None       # earnings gap-DOWN list (step 8)
 
 
 @dataclass
@@ -668,9 +701,11 @@ def run_earnings(client, limit: int | None = None) -> LiveResult:
     tcol = "Ticker" if "Ticker" in combined.columns else combined.columns[0]
     combined = combined.drop_duplicates(subset=[tcol]).reset_index(drop=True)
     earnings = build_earnings(combined)
+    down = build_earnings_down(combined)               # gap-DOWN avoid list (step 8)
     if limit:
         earnings = earnings.head(limit).reset_index(drop=True)
-    return LiveResult(df=earnings, warnings=warnings, ok=True)
+        down = down.head(limit).reset_index(drop=True)
+    return LiveResult(df=earnings, warnings=warnings, ok=True, down=down)
 
 
 def normalize_quote(ticker: str, fund: dict) -> dict:

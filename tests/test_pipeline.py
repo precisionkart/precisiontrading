@@ -129,3 +129,14 @@ def test_build_targets_industry_gate():
     ungated = pipeline.build_targets(uni, reg, save_snapshot=False, theme_ctx=ctx,
                                      no_industry_gate=True)
     assert set(ungated["ticker"]) == {"HOT", "COLD"}
+
+
+def test_build_earnings_down_avoid_list():
+    """Gap-DOWN earnings list (Phase 10 step 8): gapped down AND closed down."""
+    down = pipeline.build_earnings_down(sample_data.earnings_df())
+    assert len(down) >= 1
+    assert (down["gap"] < 0).all()
+    assert (down["change"] < 0).all()
+    # gap-up names must NOT appear in the avoid list
+    up = set(pipeline.build_earnings(sample_data.earnings_df(), persist=False)["ticker"])
+    assert up.isdisjoint(set(down["ticker"]))

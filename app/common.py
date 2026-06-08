@@ -159,12 +159,13 @@ def full_scan(ignore_rvol: bool = False) -> dict:
         if not ref.empty:
             store.save_universe_snapshot(pipeline.normalize_universe(ref.df))
     store.save_scan_cache({"focus": focus, "targets": uni.df, "earnings": ern.df,
-                           "ipo": ipo_res.watchlist}, reg, as_of,
+                           "earnings_down": ern.down, "ipo": ipo_res.watchlist}, reg, as_of,
                           theme_rank=theme_ctx.theme_rank)
     return {"regime": RegimeView(reg.state, reg.rationale), "theme_ctx": theme_ctx,
             "themes": store._themes_list(theme_ctx.theme_rank),
             "focus": focus, "targets": uni.df, "earnings": ern.df,
-            "ipo": ipo_res.watchlist, "as_of": as_of, "warnings": warnings}
+            "earnings_down": ern.down, "ipo": ipo_res.watchlist,
+            "as_of": as_of, "warnings": warnings}
 
 
 def reference_universe():
@@ -193,9 +194,10 @@ def load_published():
     return {"regime": RegimeView(reg.get("state", "neutral"), reg.get("rationale", [])),
             "theme_ctx": None, "themes": payload.get("themes", []),
             "focus": _df("focus"), "targets": _df("targets"),
-            "earnings": _df("earnings"), "ipo": _df("ipo"),
+            "earnings": _df("earnings"), "earnings_down": _df("earnings_down"),
+            "ipo": _df("ipo"), "index_levels": payload.get("index_levels", {}),
             "as_of": payload.get("as_of_et", ""), "date": payload.get("date", ""),
-            "warnings": []}
+            "as_of_mode": payload.get("as_of_mode", "full"), "warnings": []}
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +264,35 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
   {atr_readout_html(row)}
   {flags_warnings_html(row)}
 </div>""", unsafe_allow_html=True)
+
+
+def earnings_panel(df, title: str, direction: str, universe_tickers=None) -> None:
+    """One earnings-gap panel (up or down). A ★ marks names in the broad scan
+    universe. Gap-down names are AVOID signals, not trade candidates (step 8)."""
+    universe_tickers = universe_tickers or set()
+    st.markdown(f"<div class='pp-eh {direction}'>{_html.escape(title)} "
+                f"({0 if df is None else len(df)})</div>", unsafe_allow_html=True)
+    if df is None or len(df) == 0:
+        st.markdown("<div class='pp-empty'>None.</div>", unsafe_allow_html=True)
+        return
+    color = "#00D964" if direction == "up" else "#FF3366"
+    rows = []
+    for _, r in df.iterrows():
+        gap = r.get("gap")
+        gtxt = (f"{'+' if gap >= 0 else ''}{gap:.1f}%"
+                if isinstance(gap, (int, float)) and gap == gap else "—")
+        star = " ★" if str(r.get("ticker")) in universe_tickers else ""
+        eps = r.get("eps_this_y")
+        eps_txt = (f"<span class='eps'>EPS {eps:.0f}%</span>"
+                   if isinstance(eps, (int, float)) and eps == eps else "")
+        px = f"${r.get('price'):,.2f}" if r.get("price") == r.get("price") else "—"
+        rows.append(
+            f"<div class='pp-row'><span class='tk'>{_html.escape(str(r.get('ticker','')))}{star}</span>"
+            f"<span class='px'>{px}</span>"
+            f"<span class='score' style='color:{color};width:64px'>{gtxt}</span>"
+            f"{rs_chip_html(r.get('rs'))}{eps_txt}</div>")
+    st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
+                + "".join(rows) + "</div>", unsafe_allow_html=True)
 
 
 def flags_warnings_html(row) -> str:
