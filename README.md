@@ -235,6 +235,31 @@ verified accurate; only the cell *format* changed.
   broad `RS_REFERENCE_SCREEN` (matching My-Picks/cloud) by injecting a
   precomputed broad-RS column; it recomputes locally only if none is supplied.
   Costs ~1 min of performance-view fetch on a live local run.
+- **0-100 rescale: 3 layers migrated OUT of the score (Phase 10 step 1).** The
+  new base is 7 ShakeBot-mapped modules (raw weights sum to 110, normalized to
+  100); `earnings_flag` (+25), `volume_dry_up` (+2) and `slingshot` (+3) are
+  post-normalization bonuses capped at 100. To keep "the 7 modules + 3 bonuses =
+  100" mental model exact, `regime_bull` moved to the 5-state regime /
+  position-sizing, `strong_growth` became the "Triple-Digit Growth" flag (fires
+  only at EPS/Sales ≥ 100% — ordinary 25% growth is table stakes the gates
+  already cover), and `ipo_edge` is IPO-page tagging only. Each row keeps
+  `score_legacy` for one release; the rescale is a monotonic transform so
+  rankings are unchanged.
+- **5-state regime degrades on the snapshot path (Phase 10 step 7).** BULL vs
+  NEUTRAL-BULL (and BEAR vs VERY-BEAR) need the 10>20 EMA cross, which
+  `fetch_regime` derives from SPY/QQQ daily OHLCV. The Finviz-fundament snapshot
+  path (no OHLCV) can't see the cross, so it resolves to BULL / NEUTRAL-BEAR /
+  BEAR on the SMA stack alone; the live path refines to the two extra states.
+  Exposure %s are a labeled SUGGESTION, never a prescription.
+- **Earnings gap-down list has no EPS estimate (Phase 10 step 8).** The free
+  Finviz earnings screens don't expose the consensus estimate, so the AVOID
+  panel shows Ticker / Gap% / Price / RS / EPS-this-year% (a proxy) and a ★ for
+  in-universe names — not the "Estimate (EPS)" the ShakeBot mock had.
+- **Synthetic demo fixtures are env-gated, not deleted (Phase 10).**
+  `tools/seed_earnings_flag_demo.py` is a no-op unless `PINPOINT_DEMO_SEED=1`,
+  and the Dashboard quarantines known synthetic tickers (FLAGX, …) from any live
+  scan unless that flag is set, logging a tripwire if one leaks into production
+  data.
 
 ## Requirements
 
@@ -243,8 +268,13 @@ Python 3.10+ (developed on 3.12). All dependencies are free and listed in
 
 ## Status
 
-Phases 1–8 complete (data layer, screening + scoring, OHLCV/patterns/entries,
-charts + reports, themes + IPO, tests + hardening, the local Streamlit web app,
-and the read-only cloud deploy path). See [DEPLOY.md](DEPLOY.md) for the
-scheduled-scan → data-branch → Streamlit Cloud architecture (secret-free, no live
-Finviz from the cloud).
+Phases 1–10 complete. 1–8: data layer, screening + scoring,
+OHLCV/patterns/entries, charts + reports, themes + IPO, tests + hardening, the
+local Streamlit web app, and the read-only cloud deploy path. Phase 9: the
+earnings-flag connector (gap-up forward-tracking → flag-breakout Focus path,
+badge/prose/Earnings Watch page, RS-universe consistency, industry-RS gate).
+Phase 10 (ShakeBot-inspired): 0-100 score rescale + tiers, ATR-normalized
+compression, slingshot detection, named flags/warnings, 5-state regime +
+suggested position sizing, earnings gaps both directions, and the Pre-Market
+Briefing page. See [DEPLOY.md](DEPLOY.md) for the scheduled-scan → data-branch →
+Streamlit Cloud architecture (secret-free, no live Finviz from the cloud).
