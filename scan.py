@@ -341,6 +341,10 @@ def publish(cache_top: int = 250) -> int:
                                             "perf_half", "perf_year") if c in u.columns]])
         names |= set(u.nlargest(cache_top, "rs")["ticker"].dropna().tolist())
     names |= set(CONFIG.regime.benchmarks)
+    # Active earnings-watch names (gap-ups still in the 1-4 week flag window) need
+    # OHLCV cached so the cloud app can detect the flag breakout (Phase 9).
+    from pinpoint import earnings_watch as ew
+    names |= {e["ticker"] for e in ew.load_active()}
     print(f"pre-caching OHLCV for {len(names)} tickers...")
     cached = 0
     for t in sorted(names):
