@@ -266,6 +266,15 @@ verified accurate; only the cell *format* changed.
 Python 3.10+ (developed on 3.12). All dependencies are free and listed in
 [`requirements.txt`](requirements.txt). Ask before adding any paid dependency.
 
+## CLI scan → Dashboard
+
+A terminal scan (`python scan.py --all`) now writes the **Dashboard cache**
+(`data/store/cache/`) in addition to the `data/snapshots/` audit log, so the web
+app picks up the latest run. The run prints a "📁 Files written" summary at the
+end. The Dashboard does **not** auto-poll yet (that's a deferred phase), so after
+a CLI scan either **restart** `streamlit run app/Home.py` or click the **↻
+Refresh** button in the sidebar to load the fresh data.
+
 ## Status
 
 Phases 1–10 complete. 1–8: data layer, screening + scoring,

@@ -30,6 +30,7 @@ from pinpoint import DISCLAIMER, __version__
 from pinpoint import sample_data
 from pinpoint import regime as regime_mod
 from pinpoint import pipeline
+from pinpoint import store
 from pinpoint.config import CONFIG
 from pinpoint.finviz_client import FinvizClient
 
@@ -177,6 +178,7 @@ def run_live(args) -> int:
 
     any_403 = False
     targets = focus = earnings_df = None
+    earnings_down = None
     ipo_watch = None
 
     if args.min_growth:
@@ -243,6 +245,7 @@ def run_live(args) -> int:
     if want_earnings:
         ern = pipeline.run_earnings(client, limit=args.limit)
         earnings_df = ern.df
+        earnings_down = ern.down
         _print_table(
             "EARNINGS — gapped-UP reactions only (reaction > numbers), by RS",
             ern.df,
@@ -256,13 +259,41 @@ def run_live(args) -> int:
         as_of = datetime.now().strftime("%H:%M")
         render_outputs(focus, targets, earnings_df, reg, date, as_of, ipo=ipo_watch)
 
+    # Update the Dashboard cache so a terminal scan is picked up by the web app
+    # (the snapshots/ JSON stays a separate audit log). Only when we actually
+    # produced ranked lists — a bare --earnings run still refreshes earnings.
+    wrote_cache = False
+    if want_targets or want_focus or want_earnings:
+        as_of = datetime.now().strftime("%H:%M")
+        theme_rank = theme_ctx.theme_rank if theme_ctx else None
+        store.save_scan_cache(
+            {"focus": focus, "targets": targets, "earnings": earnings_df,
+             "earnings_down": earnings_down, "ipo": ipo_watch}, reg, as_of,
+            theme_rank=theme_rank)
+        wrote_cache = True
+
     if any_403:
         print("\n🚫 Finviz returned 403/blocked on at least one request.")
         print("   Try raising CONFIG.network.request_delay_s to 2-3s, use a "
               "residential IP, or a Finviz Elite session (see README).")
 
+    _print_written_files(wrote_cache, want_targets or want_focus)
     _print_final_status(targets, focus, earnings_df, ipo_watch, any_403)
     return 0
+
+
+def _print_written_files(wrote_cache: bool, wrote_targets_snap: bool) -> None:
+    """Tell the user exactly which files were written and whether the Dashboard
+    will see them."""
+    print("\n📁 Files written:")
+    if wrote_cache:
+        print(f"   {store._cache_dir()}/  — Dashboard cache (web app will refresh "
+              "on restart or sidebar ↻)")
+    if wrote_targets_snap:
+        date = datetime.now().strftime("%Y-%m-%d")
+        print(f"   {CONFIG.paths.data_dir}/snapshots/targets_{date}.json  — audit log")
+    if not (wrote_cache or wrote_targets_snap):
+        print("   (none)")
 
 
 def _n(df) -> int:
