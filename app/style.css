@@ -195,4 +195,10 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .pp-eh { font-weight:700; font-size:13px; margin:4px 0 8px; }
 .pp-eh.down { color:var(--down); } .pp-eh.up { color:var(--up); }
 .pp-row .eps { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); margin-left:8px; }
+.pp-lvls { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:6px 0; }
+.pp-lvl { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 14px; }
+.pp-lvl .dot { width:9px; height:9px; border-radius:999px; flex:0 0 auto; }
+.pp-lvl .sym { font-weight:700; font-size:13px; }
+.pp-lvl .px { font-family:'Geist Mono',monospace; font-size:13px; margin-left:auto; }
+.pp-lvl .chg { font-family:'Geist Mono',monospace; font-size:12px; font-weight:600; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

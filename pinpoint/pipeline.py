@@ -598,6 +598,30 @@ class LiveResult:
     down: pd.DataFrame | None = None       # earnings gap-DOWN list (step 8)
 
 
+INDEX_SYMBOLS = ("SPY", "QQQ", "IWM", "DIA")
+
+
+def fetch_index_levels(symbols=INDEX_SYMBOLS) -> dict:
+    """Latest close + overnight change% for the headline index ETFs (Phase 10
+    step 9). Uses the OHLCV layer (yfinance/Stooq, cached); a symbol that fails
+    to fetch is simply omitted. Returns {sym: {price, change_pct, as_of}}."""
+    out: dict[str, dict] = {}
+    for sym in symbols:
+        try:
+            daily = ohlcv_mod.fetch_daily(sym).df
+            if daily is None or len(daily) < 2 or "Close" not in daily.columns:
+                continue
+            last = float(daily["Close"].iloc[-1])
+            prev = float(daily["Close"].iloc[-2])
+            chg = (last / prev - 1.0) * 100.0 if prev else float("nan")
+            as_of = (str(daily.index[-1].date()) if hasattr(daily.index[-1], "date")
+                     else str(daily.index[-1]))
+            out[sym] = {"price": round(last, 2), "change_pct": round(chg, 2), "as_of": as_of}
+        except Exception:  # noqa: BLE001
+            continue
+    return out
+
+
 @dataclass
 class UniverseResult:
     """Built Targets plus the normalized universe behind them (so Focus can be

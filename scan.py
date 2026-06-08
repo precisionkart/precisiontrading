@@ -353,11 +353,12 @@ def publish(cache_top: int = 250) -> int:
 
     now_utc = datetime.now(timezone.utc)
     as_of_et = now_utc.astimezone(et).strftime("%H:%M %Z")
+    index_levels = pipeline.fetch_index_levels()       # SPY/QQQ/IWM/DIA (step 9)
     path = store.save_published_scan(
         reg, theme_ctx.theme_rank,
         {"focus": focus, "targets": targets, "earnings": ern.df,
          "earnings_down": ern.down, "ipo": ipo_res.watchlist},
-        as_of_et=as_of_et, as_of_utc=now_utc.isoformat())
+        as_of_et=as_of_et, as_of_utc=now_utc.isoformat(), index_levels=index_levels)
 
     blocked = _has_block(warnings)
     print(f"\n{'⚠️ Partial' if blocked else '✅'} published: "

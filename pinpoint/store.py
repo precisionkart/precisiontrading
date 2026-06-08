@@ -186,18 +186,22 @@ def published_path() -> str:
 
 
 def save_published_scan(regime, themes_ranked: dict, lists: dict, as_of_et: str,
-                        as_of_utc: str) -> Optional[str]:
+                        as_of_utc: str, index_levels: Optional[dict] = None,
+                        as_of_mode: str = "full") -> Optional[str]:
     """Serialize a full scan to data/latest_scan.json for the read-only cloud app.
 
-    `lists` maps name -> DataFrame (focus/targets/earnings/ipo). `themes_ranked`
-    is theme_ctx.theme_rank. Everything is plain JSON so no engine runs on cloud
-    to render the dashboard."""
+    `lists` maps name -> DataFrame (focus/targets/earnings/earnings_down/ipo).
+    `themes_ranked` is theme_ctx.theme_rank. `index_levels` is the SPY/QQQ/IWM/DIA
+    snapshot for the Pre-Market Briefing (Phase 10 step 9). Everything is plain
+    JSON so no engine runs on cloud to render the dashboard."""
     from datetime import date as _date
     payload = {
         "date": _date.today().isoformat(),
-        "as_of_et": as_of_et, "as_of_utc": as_of_utc,
+        "as_of_et": as_of_et, "as_of_utc": as_of_utc, "as_of_mode": as_of_mode,
         "regime": {"state": getattr(regime, "state", "neutral"),
-                   "rationale": getattr(regime, "rationale", []) or []},
+                   "rationale": getattr(regime, "rationale", []) or [],
+                   "exposure_label": getattr(regime, "exposure_label", "One-Third")},
+        "index_levels": index_levels or {},
         "themes": [{"theme": t, "rank": r["rank"], "score": r["score"]}
                    for t, r in sorted((themes_ranked or {}).items(),
                                       key=lambda kv: kv[1]["rank"])],

@@ -39,9 +39,11 @@ mypicks = st.Page("views/my_picks.py", title="My Picks", icon=":material/insight
 fullscan = st.Page("views/full_scan.py", title="Full Scan", icon=":material/search:")
 earnings = st.Page("views/earnings_watch_page.py", title="Earnings Watch",
                    icon=":material/trending_up:")
+premarket = st.Page("views/premarket.py", title="Pre-Market Briefing",
+                    icon=":material/wb_twilight:")
 watchlist = st.Page("views/watchlist.py", title="Watchlist", icon=":material/star:")
 settings = st.Page("views/settings.py", title="Settings", icon=":material/settings:")
-nav = st.navigation([dashboard, mypicks, fullscan, earnings, watchlist, settings],
+nav = st.navigation([dashboard, mypicks, fullscan, premarket, earnings, watchlist, settings],
                     position="hidden")
 
 with st.sidebar:
@@ -49,6 +51,7 @@ with st.sidebar:
     st.page_link(dashboard)
     st.page_link(mypicks)
     st.page_link(fullscan)
+    st.page_link(premarket)
     st.page_link(earnings)
     st.page_link(watchlist)
     st.page_link(settings)
