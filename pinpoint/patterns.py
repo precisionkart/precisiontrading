@@ -404,6 +404,52 @@ def detect_earnings_flag(df: pd.DataFrame, gap_date, gap_high: float,
     return out
 
 
+def detect_slingshot(df: pd.DataFrame, advance_window: int = 126,
+                     min_advance_pct: float = 50.0, shake_lookback: int = 10,
+                     vol_mult: float = 1.3) -> dict:
+    """Slingshot (Phase 10 step 4): an established leader that briefly lost its
+    50 SMA and just reclaimed it on volume — the shakeout-and-reclaim.
+
+    Fires when ALL hold:
+      - a >`min_advance_pct`% advance within the last `advance_window` bars
+        (the name is already a leader),
+      - close was BELOW the 50 SMA at some point in the last `shake_lookback`
+        bars (the shakeout),
+      - the most recent bar closed back ABOVE the 50 SMA (the reclaim),
+      - reclaim-bar volume > `vol_mult`x the prior 20-bar average.
+
+    Returns {detected, shakeout_low, reclaim_bar_date}.
+    """
+    from . import ohlcv as ohlcv_mod
+    out = {"detected": False, "shakeout_low": None, "reclaim_bar_date": None}
+    d = ohlcv_mod.add_moving_averages(df) if df is not None and len(df) else df
+    if d is None or len(d) < 30 or "SMA50" not in d.columns:
+        return out
+    last = d.iloc[-1]
+    if last["Close"] <= last["SMA50"] or last["SMA50"] != last["SMA50"]:
+        return out                                          # not above the 50 now
+
+    win = d.iloc[-advance_window:] if len(d) > advance_window else d
+    lo, hi = float(win["Close"].min()), float(win["Close"].max())
+    if lo <= 0 or (hi / lo - 1.0) * 100.0 < min_advance_pct:
+        return out                                          # not a leader
+
+    recent = d.iloc[-shake_lookback - 1:-1]                 # bars before today
+    below = recent[recent["Close"] < recent["SMA50"]]
+    if below.empty:
+        return out                                          # never lost the 50
+
+    vol_prior = d["Volume"].iloc[-21:-1].mean() if "Volume" in d.columns else float("nan")
+    if not vol_prior or vol_prior != vol_prior or last["Volume"] <= vol_mult * vol_prior:
+        return out                                          # reclaim not on volume
+
+    out.update(detected=True,
+               shakeout_low=round(float(below["Low"].min()), 2),
+               reclaim_bar_date=str(d.index[-1].date()) if hasattr(d.index[-1], "date")
+               else str(d.index[-1]))
+    return out
+
+
 def detect_inside_day(df: pd.DataFrame) -> Optional[Pattern]:
     """Inside day: lower high AND higher low vs the prior bar (compression).
     Entry through the inside-day high; stop below the inside-day low (or the

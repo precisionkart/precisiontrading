@@ -105,6 +105,9 @@ class PickResult:
     spread_5_10_atr: Optional[float] = None
     spread_10_20_atr: Optional[float] = None
     spread_price_20_atr: Optional[float] = None
+    # Phase 10 step 4 — slingshot reclaim.
+    slingshot_active: bool = False
+    slingshot_shakeout_low: Optional[float] = None
 
     @property
     def is_pinpoint(self) -> bool:
@@ -280,6 +283,7 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
             beta = float(row.get("beta", np.nan))
             bb = stage_mod.beach_ball_residual(d["Close"], index_close, beta=beta).is_beach_ball
         comp = patterns_mod.atr_compression(d)             # ATR-normalized (step 3)
+        sling = patterns_mod.detect_slingshot(daily_raw)   # step 4
         base_layers.update({
             "valid_pattern": pat is not None,
             "tight_contraction": comp["compression_score"] > 0,
@@ -289,11 +293,13 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
             "beach_ball": bb,
             "reward_risk": bool(rr is not None and rr >= CONFIG.entry.min_reward_risk),
             "earnings_flag": bool(ef["detected"]),
+            "slingshot": bool(sling["detected"]),
         })
     else:
         comp = {"atr_14": float("nan"), "compression_score": 0.0,
                 "spread_5_10_atr": float("nan"), "spread_10_20_atr": float("nan"),
                 "spread_price_20_atr": float("nan")}
+        sling = {"detected": False, "shakeout_low": None, "reclaim_bar_date": None}
     result = score_layers(base_layers,
                           partials={"tight_contraction": comp["compression_score"]})
 
@@ -361,6 +367,8 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         spread_5_10_atr=comp.get("spread_5_10_atr"),
         spread_10_20_atr=comp.get("spread_10_20_atr"),
         spread_price_20_atr=comp.get("spread_price_20_atr"),
+        slingshot_active=bool(sling["detected"]),
+        slingshot_shakeout_low=sling.get("shakeout_low"),
     )
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr

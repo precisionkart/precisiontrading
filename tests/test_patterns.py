@@ -151,3 +151,26 @@ def test_atr_compression_loose():
                        "Close": close, "Volume": [1e6] * 60})
     c = atr_compression(df)
     assert c["compression_score"] <= 7.0
+
+
+def test_slingshot_positive_and_negative():
+    import numpy as np
+    from pinpoint.patterns import detect_slingshot
+    up = np.linspace(100, 165, 110)
+    dip = np.array([162, 160, 156, 150, 148, 151, 150, 149, 148.0])
+    close = np.concatenate([up, dip, [172.0]])
+    vol = np.array([1e6] * (len(close) - 1) + [2e6])
+    df = pd.DataFrame({"Open": close, "High": close + 1, "Low": close - 1,
+                       "Close": close, "Volume": vol})
+    r = detect_slingshot(df)
+    assert r["detected"] and r["shakeout_low"] is not None
+
+    # steady leader that never lost the 50 SMA -> no slingshot
+    c2 = np.linspace(100, 165, 120)
+    df2 = pd.DataFrame({"Open": c2, "High": c2 + 1, "Low": c2 - 1, "Close": c2,
+                        "Volume": [1e6] * 120})
+    assert detect_slingshot(df2)["detected"] is False
+
+    # reclaim without a volume surge -> no slingshot
+    df3 = df.copy(); df3.loc[df3.index[-1], "Volume"] = 1e6
+    assert detect_slingshot(df3)["detected"] is False

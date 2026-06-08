@@ -434,24 +434,26 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
         if ew_entry and ew_entry.get("initial_post_gap_high"):
             ef = patterns_mod.detect_earnings_flag(
                 daily, ew_entry.get("gap_date"), ew_entry["initial_post_gap_high"])
+        sling = patterns_mod.detect_slingshot(daily)        # step 4
 
         pat = patterns_mod.best_pattern(d, finviz_signals=None, require_measured=True)
         if pat is not None:
             stop_support = float(d["Low"].iloc[-lookback:].min())
             setup = entries_mod.compute_setup(pat.trigger, stop_support, pat.measured_target)
-        elif ef["detected"]:
-            # synthesize a setup from the flag: breakout trigger + tight pivot +
-            # prior-advance (the gap pole) projection.
+        elif ef["detected"] or sling["detected"]:
+            # synthesize a setup from the flag / slingshot reclaim: breakout
+            # trigger + tight pivot + prior-advance projection.
             trigger = float(d["High"].iloc[-min(5, len(d)):].max())
-            stop_support = float(d["Low"].iloc[-lookback:].min())
+            stop_support = (float(sling["shakeout_low"]) if sling["detected"]
+                            and sling.get("shakeout_low") else float(d["Low"].iloc[-lookback:].min()))
             measured = patterns_mod._prior_advance_target(d, trigger, ef.get("flag_days", 10) or 10,
                                                           fallback=trigger * 1.15)
             setup = entries_mod.compute_setup(trigger, stop_support, measured)
         else:
             continue
-        # Focus requires R:R >= 5:1 — UNLESS it's a confirmed earnings flag (the
-        # spec's best setup earns inclusion on its own).
-        if not setup.rr_ok and not ef["detected"]:
+        # Focus requires R:R >= 5:1 — UNLESS it's a confirmed earnings flag or a
+        # slingshot reclaim (both earn inclusion on their own).
+        if not setup.rr_ok and not ef["detected"] and not sling["detected"]:
             continue
 
         cont = timeframes_mod.continuity(daily)
@@ -481,6 +483,7 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "beach_ball": bool(bb_fired),
             "reward_risk": bool(setup.rr_ok),
             "earnings_flag": ef_active,
+            "slingshot": bool(sling["detected"]),
         })
         result = score_layers(base_layers,
                               partials={"tight_contraction": comp["compression_score"]})
@@ -522,6 +525,8 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "spread_5_10_atr": comp["spread_5_10_atr"],
             "spread_10_20_atr": comp["spread_10_20_atr"],
             "spread_price_20_atr": comp["spread_price_20_atr"],
+            "slingshot_active": bool(sling["detected"]),
+            "slingshot_shakeout_low": sling.get("shakeout_low"),
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
             "tier": result.tier,
