@@ -16,8 +16,12 @@ def test_layer_weights_cover_all_layers():
     assert all(k in LAYER_LABELS for k in LAYER_NAMES)
 
 
-def test_max_possible_score_matches_sum():
-    assert max_possible_score() == round(sum(CONFIG.layers.as_dict().values()), 3)
+def test_max_possible_score_is_100():
+    # 0-100 rescale (Phase 10 step 1): the base normalizes to 100 and the score
+    # is capped there, so the ceiling is exactly SCORE_MAX regardless of weights.
+    assert max_possible_score() == 100.0
+    # the raw base weights still sum to the documented module total (110).
+    assert round(sum(CONFIG.layers.as_dict().values()), 3) == 110.0
 
 
 def test_targets_screen_has_core_gates():

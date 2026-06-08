@@ -100,41 +100,64 @@ class EntryConfig:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class LayerWeights:
-    regime_bull: float = 1.0               # 1. regime bull / on buy signal
-    tight_contraction: float = 1.0         # 2. converged EMAs
-    valid_pattern: float = 1.5             # 3. valid bullish pattern
-    stage_2: float = 1.5                   # 4. Stage 2 (or clean 1->2)
-    support_resistance_flip: float = 1.0   # 5. S/R flip (best weekly)
-    correct_ma_reaction: float = 1.0       # 6. riding 5/10/20
-    hot_theme: float = 1.0                 # 7. hot theme / leading sector
-    timeframe_continuity: float = 2.0      # 8. time-frame continuity (heavy)
-    top_industry_group: float = 1.0        # 9. top 5-10 industry group
-    strong_growth: float = 1.5             # 10. strong + accelerating growth
-    ipo_edge: float = 0.5                  # 11. IPO price-discovery edge
-    beach_ball: float = 2.0                # 12. beach-ball rel. strength (heavy)
-    volume_confirmation: float = 1.0       # 13. RVOL>2 / breakout surge
-    reward_risk: float = 1.0               # 14. R:R >= 5:1
-    # 15. EARNINGS FLAG (3.6 ⭐) — the spec's highest-edge setup: a tracked
-    # earnings gap-up now breaking out of its flag. Dominant weight (Phase 10
-    # will rescale this to +25 on the 0-100 scale).
-    earnings_flag: float = 4.0
+    """0-100 rescale (Phase 10 step 1). The additive base is 7 ShakeBot-mapped
+    modules whose RAW weights sum to BASE_TOTAL (110) and are normalized to 100
+    in scoring.py. Three bonuses are added AFTER normalization and the final
+    score is capped at 100. Three legacy layers were migrated OUT of the score:
+      regime_bull   -> 5-state regime / position-sizing suggestion (step 7)
+      strong_growth -> "Triple-Digit Growth" plain-English flag (step 5)
+      ipo_edge      -> IPO-page tagging only (not scored on the Focus list)
+    """
+    # --- Compression (25) ---
+    tight_contraction: float = 25.0
+    # --- Trend / Structure (25) ---
+    stage_2: float = 10.0
+    valid_pattern: float = 10.0
+    support_resistance_flip: float = 5.0
+    # --- MA Slopes (18) ---
+    timeframe_continuity: float = 10.0
+    correct_ma_reaction: float = 8.0
+    # --- Breakout Ready (12) ---
+    volume_confirmation: float = 12.0
+    # --- Relative Strength (10) ---
+    beach_ball: float = 10.0
+    # --- Risk Quality (5) ---
+    reward_risk: float = 5.0
+    # --- Sector Strength (15) ---
+    hot_theme: float = 8.0
+    top_industry_group: float = 7.0
+
+    # Bonuses — added after the base is normalized to 100, then capped at 100.
+    volume_dry_up: float = 2.0             # 5-bar dry-up (step 5 flag)
+    slingshot: float = 3.0                 # leader shakeout-and-reclaim (step 4)
+    earnings_flag: float = 25.0            # 3.6 ⭐ tracked gap-up breaking out
+
+    # Migrated out of the additive score (kept as 0.0 for back-compat refs).
+    regime_bull: float = 0.0
+    strong_growth: float = 0.0
+    ipo_edge: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
+        """The normalized BASE only (the 7 modules; raw weights sum to 110)."""
         return {
-            "regime_bull": self.regime_bull,
             "tight_contraction": self.tight_contraction,
-            "valid_pattern": self.valid_pattern,
             "stage_2": self.stage_2,
+            "valid_pattern": self.valid_pattern,
             "support_resistance_flip": self.support_resistance_flip,
-            "correct_ma_reaction": self.correct_ma_reaction,
-            "hot_theme": self.hot_theme,
             "timeframe_continuity": self.timeframe_continuity,
-            "top_industry_group": self.top_industry_group,
-            "strong_growth": self.strong_growth,
-            "ipo_edge": self.ipo_edge,
-            "beach_ball": self.beach_ball,
+            "correct_ma_reaction": self.correct_ma_reaction,
             "volume_confirmation": self.volume_confirmation,
+            "beach_ball": self.beach_ball,
             "reward_risk": self.reward_risk,
+            "hot_theme": self.hot_theme,
+            "top_industry_group": self.top_industry_group,
+        }
+
+    def bonus_dict(self) -> dict[str, float]:
+        """Bonuses added after normalization (score then capped at 100)."""
+        return {
+            "volume_dry_up": self.volume_dry_up,
+            "slingshot": self.slingshot,
             "earnings_flag": self.earnings_flag,
         }
 

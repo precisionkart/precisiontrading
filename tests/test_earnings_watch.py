@@ -120,15 +120,17 @@ def test_enrich_focus_earnings_flag_fires_and_boosts_score():
     row = with_flag.iloc[0]
     assert bool(row["earnings_flag_active"]) is True
     assert row["gap_pct"] == 8.4
-    assert "Earnings flag breakout (highest-edge)" in row["layers"]
+    assert "Earnings flag breakout (+25 bonus, highest-edge)" in row["layers"]
 
-    # heavy weighting: same name without the earnings flag scores lower by ~4.0
+    # heavy weighting on the 0-100 scale: the earnings-flag bonus is +25 (Phase
+    # 10 step 1/2), unless the base already pushed the name to the 100 cap.
     without = pipeline.enrich_focus(targets, universe, reg,
                                     ohlcv_provider=lambda t: df, index_daily=idx,
                                     earnings_ctx={})
     assert len(without) == 1
-    assert with_flag.iloc[0]["pinpoint_score"] - without.iloc[0]["pinpoint_score"] == \
-        pytest.approx(4.0, abs=1e-6)
+    base = without.iloc[0]["pinpoint_score"]
+    expected = min(100.0, base + 25.0) - base
+    assert with_flag.iloc[0]["pinpoint_score"] - base == pytest.approx(expected, abs=1e-6)
 
 
 def test_active_ctx():

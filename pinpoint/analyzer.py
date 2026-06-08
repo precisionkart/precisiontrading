@@ -79,6 +79,8 @@ class PickResult:
     target: Optional[float] = None
     reward_risk: Optional[float] = None
     score: float = 0.0
+    score_legacy: float = 0.0
+    tier: Optional[str] = None
     n_layers: int = 0
     layers: str = ""
     verdict: str = ""
@@ -331,7 +333,8 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         entry=(setup.entry if setup else None), stop=(setup.stop if setup else None),
         target=(setup.measured_target if setup else None),
         reward_risk=(round(rr, 2) if rr is not None else None),
-        score=result.score, n_layers=len(result.fired), layers=result.breakdown_str(),
+        score=result.score, score_legacy=result.score_legacy, tier=result.tier,
+        n_layers=len(result.fired), layers=result.breakdown_str(),
         daily=daily_raw if have_ohlcv else None,
         note="" if have_ohlcv else "no OHLCV available",
         criteria=criteria, rvol=relv, measured_move_pct=measured_pct,
