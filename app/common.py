@@ -651,6 +651,20 @@ def render_detail_inline(pr) -> None:
             st.markdown("<div class='pp-empty'>chart unavailable (OHLCV not cached)</div>",
                         unsafe_allow_html=True)
 
+        # 1b) the trade plan as explicit numbers — always shown, independent of
+        # the chart (entry/stop were previously only drawn as chart pills).
+        st.markdown(
+            "<div class='pp-grid4'>"
+            f"<div class='pp-cell'><div class='k'>Entry</div>"
+            f"<div class='v green'>${_fmt(pr.entry)}</div></div>"
+            f"<div class='pp-cell'><div class='k'>Exit · stop (.89)</div>"
+            f"<div class='v red'>${_fmt(pr.stop)}</div></div>"
+            f"<div class='pp-cell'><div class='k'>Target</div>"
+            f"<div class='v'>${_fmt(pr.target)}</div></div>"
+            f"<div class='pp-cell'><div class='k'>R:R</div>"
+            f"<div class='v'>{_fmt(pr.reward_risk, 1)}:1</div></div>"
+            "</div>", unsafe_allow_html=True)
+
         # 2) plain-English explanation
         st.markdown(f"<div class='pp-explain'>{dl.setup_explanation(pr)}</div>",
                     unsafe_allow_html=True)
