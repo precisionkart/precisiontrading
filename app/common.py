@@ -126,6 +126,19 @@ def refresh_status(scan=None, cloud: bool = None):
     return (dt.strftime("%a %-d %b, %H:%M") + " ET", color)
 
 
+def next_scheduled_scan():
+    """The next weekday 09:30 ET morning-cron time (datetime). Today if it's a
+    weekday before 09:30, else the next weekday."""
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    cand = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    if not (now < cand and now.weekday() < 5):
+        cand += timedelta(days=1)
+        while cand.weekday() >= 5:                       # skip Sat/Sun
+            cand += timedelta(days=1)
+    return cand
+
+
 def page_header(title: str, subtitle: str = None) -> None:
     """Consistent page header on every page: title (left) + an absolute
     'Last refreshed' timestamp with a status dot (right). `title` may contain
@@ -770,8 +783,8 @@ def render_podium(focus_rows: list) -> None:
                     st.session_state["scroll_to"] = row["ticker"]
                     st.rerun()
             else:
-                st.markdown(f"<div class='pp-podium-empty'>No #{i + 1} setup today — wait</div>",
-                            unsafe_allow_html=True)
+                st.markdown(f"<div class='pp-podium-empty'>No #{i + 1} setup today — "
+                            f"sitting in cash is a position</div>", unsafe_allow_html=True)
 
 
 def scroll_to_card() -> None:

@@ -19,8 +19,12 @@ scan = st.session_state.get("scan")
 
 c.page_header("Today")
 if not scan:
-    msg = ("No published scan found (data/latest_scan.json)."
-           if CLOUD else "No scan yet today — hit the ↻ refresh in the sidebar.")
+    if CLOUD:
+        msg = "No published scan found (data/latest_scan.json)."
+    else:
+        nxt = c.next_scheduled_scan().strftime("%a %-d %b, 09:30")
+        msg = (f"No scan today — next scheduled scan: {nxt} ET. "
+               "Or hit the ↻ refresh in the sidebar to run one now.")
     st.markdown(f"<div class='pp-sub'>{msg}</div>", unsafe_allow_html=True)
     c.disclaimer_footer()
     st.stop()
@@ -41,28 +45,19 @@ st.markdown(
     unsafe_allow_html=True)
 c.warning_banner(scan.get("warnings"))
 
-# ---- Top 3 Podium (Focus-source only; hidden entirely when 0 Focus) ----
+# ---- Top 3 Podium — Tier 1/2 (>=65) qualifying, enriched setups ONLY ----
 focus = scan.get("focus")
 ef_tickers = set()
 if focus is not None and len(focus) and "earnings_flag_active" in focus.columns:
     ef_tickers = set(focus[focus["earnings_flag_active"] == True]["ticker"].astype(str))  # noqa: E712
-focus_rows = []
-if focus is not None and len(focus):
-    f = focus.sort_values(["earnings_flag_active", "pinpoint_score"], ascending=False) \
-        if "earnings_flag_active" in focus.columns else focus.sort_values("pinpoint_score", ascending=False)
-    for _, r in f.head(3).iterrows():
-        focus_rows.append({"ticker": r.get("ticker"), "sector": r.get("sector"),
-                           "score": r.get("pinpoint_score"), "rs": r.get("rs"),
-                           "pattern": r.get("pattern"), "entry": r.get("entry_trigger"),
-                           "stop": r.get("stop"), "target": r.get("measured_target"),
-                           "reward_risk": r.get("reward_risk"),
-                           "earnings_flag": str(r.get("ticker")) in ef_tickers})
-if focus_rows:
+podium_rows = dl.build_podium(focus)
+if podium_rows:
     st.markdown("<div class='pp-section'>Top 3 — best setups today</div>", unsafe_allow_html=True)
-    c.render_podium(focus_rows)
+    c.render_podium(podium_rows)              # pads to 3 with "sitting in cash" cards
 else:
-    st.markdown("<div class='pp-cash-note'>No Pinpoint A+ setups today — sitting in cash "
-                "is a position.</div>", unsafe_allow_html=True)
+    # Zero qualifying setups: hide the podium entirely (no fake "best setup").
+    st.markdown("<div class='pp-cash-note'>No Pinpoint A+ setups today — "
+                "wait for tomorrow's scan.</div>", unsafe_allow_html=True)
 
 
 def detail_fn(tk: str):

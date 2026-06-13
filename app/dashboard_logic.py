@@ -8,11 +8,65 @@ prose all live here.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger("pinpoint")
+
+# A podium card is labeled "BEST SETUP TODAY" — it must be a genuine setup, so
+# only Tier 1 (>=80) / Tier 2 (>=65) names with a full enriched trade plan
+# qualify. Never put a sub-Tier-2 score or an unenriched row in a podium card.
+PODIUM_MIN_SCORE = 65.0
+
+
+def _plan_value(row, *keys):
+    """First non-null/finite numeric among `keys` (e.g. measured_target then
+    target_5r), else None."""
+    for k in keys:
+        v = row.get(k)
+        if isinstance(v, (int, float)) and v == v:
+            return float(v)
+    return None
+
+
+def build_podium(focus, min_score: float = PODIUM_MIN_SCORE) -> list:
+    """Qualifying podium setups: score >= min_score (Tier 1/2) AND fully enriched
+    (entry, stop, R:R, and a target). Names that clear the score gate but lack a
+    trade plan are excluded with a logged warning. Sorted earnings-flag first,
+    then score. Returns up to 3 podium-row dicts."""
+    if focus is None or len(focus) == 0 or "pinpoint_score" not in getattr(focus, "columns", []):
+        return []
+    df = focus.copy()
+    if "earnings_flag_active" in df.columns:
+        df = df.sort_values(["earnings_flag_active", "pinpoint_score"], ascending=False)
+    else:
+        df = df.sort_values("pinpoint_score", ascending=False)
+
+    out = []
+    for _, r in df.iterrows():
+        score = r.get("pinpoint_score")
+        if not (isinstance(score, (int, float)) and score == score and score >= min_score):
+            continue                                   # below the Tier-2 floor
+        entry = _plan_value(r, "entry_trigger", "entry")
+        stop = _plan_value(r, "stop")
+        rr = _plan_value(r, "reward_risk")
+        target = _plan_value(r, "measured_target", "target_5r", "target")
+        if entry is None or stop is None or rr is None or target is None:
+            logger.warning("podium: excluding %s (score %.1f) — unenriched / no "
+                           "trade plan (entry=%s stop=%s rr=%s target=%s)",
+                           r.get("ticker"), score, entry, stop, rr, target)
+            continue
+        out.append({"ticker": r.get("ticker"), "sector": r.get("sector"),
+                    "score": score, "rs": r.get("rs"), "pattern": r.get("pattern"),
+                    "entry": entry, "stop": stop, "target": target, "reward_risk": rr,
+                    "earnings_flag": bool(r.get("earnings_flag_active"))})
+        if len(out) == 3:
+            break
+    return out
 
 # RS tier -> (background, text) colors (Phase 7.6 fluoro).
 RS_TIERS = [

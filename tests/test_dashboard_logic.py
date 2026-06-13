@@ -159,3 +159,38 @@ def test_technical_analysis_prose():
                                 index_daily=_ohlcv("IDX"), ohlcv_provider=_ohlcv)[0]
     text = dl.technical_analysis(pr)
     assert "STRONG" in text and "R:R" in text
+
+
+def test_build_podium_excludes_sub_tier2_and_unenriched():
+    """Podium = Tier 1/2 (>=65) AND fully enriched only (Phase 10 fix). Sub-65
+    scores and rows missing a trade plan must never be labeled 'best setup'."""
+    focus = pd.DataFrame([
+        # qualifies: score 82, full plan
+        dict(ticker="GOOD", sector="Tech", pinpoint_score=82.0, rs=95,
+             pattern="Flat base", entry_trigger=89.41, stop=82.89,
+             measured_target=110.0, reward_risk=6.3, earnings_flag_active=False),
+        # excluded: score 60 (< 65 floor) despite a full plan
+        dict(ticker="LOWSC", sector="Tech", pinpoint_score=60.0, rs=88,
+             pattern="Base", entry_trigger=50.0, stop=47.0,
+             measured_target=70.0, reward_risk=6.0, earnings_flag_active=False),
+        # excluded: score 90 but unenriched (no entry/stop/target/rr)
+        dict(ticker="NOPLAN", sector="Tech", pinpoint_score=90.0, rs=99,
+             pattern="—", entry_trigger=None, stop=None,
+             measured_target=None, reward_risk=None, earnings_flag_active=False),
+    ])
+    podium = dl.build_podium(focus)
+    tickers = [r["ticker"] for r in podium]
+    assert tickers == ["GOOD"]                       # only the qualifying enriched name
+    assert "LOWSC" not in tickers                     # sub-Tier-2 score excluded
+    assert "NOPLAN" not in tickers                     # unenriched excluded
+    assert podium[0]["entry"] == 89.41 and podium[0]["reward_risk"] == 6.3
+
+
+def test_build_podium_empty_when_nothing_qualifies():
+    focus = pd.DataFrame([
+        dict(ticker="MEH", sector="Tech", pinpoint_score=40.0, rs=70,
+             pattern="—", entry_trigger=10.0, stop=9.0, measured_target=15.0,
+             reward_risk=5.0, earnings_flag_active=False)])
+    assert dl.build_podium(focus) == []
+    assert dl.build_podium(None) == []
+    assert dl.build_podium(pd.DataFrame()) == []
