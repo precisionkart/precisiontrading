@@ -385,11 +385,14 @@ def publish(cache_top: int = 250) -> int:
     now_utc = datetime.now(timezone.utc)
     as_of_et = now_utc.astimezone(et).strftime("%H:%M %Z")
     index_levels = pipeline.fetch_index_levels()       # SPY/QQQ/IWM/DIA (step 9)
+    lists = {"focus": focus, "targets": targets, "earnings": ern.df,
+             "earnings_down": ern.down, "ipo": ipo_res.watchlist}
     path = store.save_published_scan(
-        reg, theme_ctx.theme_rank,
-        {"focus": focus, "targets": targets, "earnings": ern.df,
-         "earnings_down": ern.down, "ipo": ipo_res.watchlist},
+        reg, theme_ctx.theme_rank, lists,
         as_of_et=as_of_et, as_of_utc=now_utc.isoformat(), index_levels=index_levels)
+    # Also refresh the LOCAL Dashboard cache so a local --publish (or the manual
+    # Refresh button) updates both paths atomically — not just the cloud blob.
+    store.save_scan_cache(lists, reg, as_of_et, theme_rank=theme_ctx.theme_rank)
 
     blocked = _has_block(warnings)
     print(f"\n{'⚠️ Partial' if blocked else '✅'} published: "

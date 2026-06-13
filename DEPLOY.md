@@ -57,10 +57,16 @@ cloud app renders from that committed snapshot. This sidesteps the Finviz
    - Deploy. The app comes up at `https://<your-app>.streamlit.app`.
 4. **Enable the schedule.** The workflow in
    [`.github/workflows/scheduled-scan.yml`](.github/workflows/scheduled-scan.yml)
-   runs weekdays at 21:30 UTC (17:30 ET in EDT) and on manual dispatch. Open the
-   Actions tab → "scheduled-scan" → "Run workflow" to test it end-to-end. Each run
+   runs **once per weekday morning** at 13:30 UTC (9:30 AM ET in EDT) and on
+   manual dispatch — never intraday, never weekends. Open the Actions tab →
+   "scheduled-scan" → "Run workflow" to test it end-to-end. Each run
    force-refreshes the `data` branch; Streamlit Cloud auto-reboots and serves the
    fresh snapshot.
+
+   *Data-semantics note:* 9:30 AM ET is the market **open**, so the morning scan
+   reads yesterday's settled close plus the first ticks of today (a morning
+   briefing). If you prefer **settled closing prices**, change the cron to
+   `30 21 * * 1-5` (17:30 ET, post-close) — the strategy's original cadence.
 
 No secrets are required — the cloud app makes zero Finviz calls, and the Action
 only needs the default `GITHUB_TOKEN` (granted `contents: write` in the workflow).
@@ -69,17 +75,18 @@ only needs the default `GITHUB_TOKEN` (granted `contents: write` in the workflow
 
 GitHub's runners share IP ranges that Finviz may eventually throttle. If the
 scheduled scan starts returning empty/partial, run it from your Mac's residential
-IP instead with [`scripts/run_scheduled_scan.sh`](scripts/run_scheduled_scan.sh):
+IP instead with [`scripts/run_morning_scan.sh`](scripts/run_morning_scan.sh)
+(`run_scheduled_scan.sh` remains for a post-close 17:30 ET cadence):
 
 ```bash
-# cron (weekdays 17:30 ET):
-30 17 * * 1-5  cd /path/to/pinpoint_scanner && ./scripts/run_scheduled_scan.sh >> /tmp/pinpoint_scan.log 2>&1
+# cron (weekdays 9:30 AM ET) — once per day, never intraday/weekends:
+30 9 * * 1-5  cd /path/to/pinpoint_scanner && ./scripts/run_morning_scan.sh >> /tmp/pinpoint_morning.log 2>&1
 ```
 
 Or with launchd: create `~/Library/LaunchAgents/com.pinpoint.scan.plist` with a
-`StartCalendarInterval` of Hour 17 / Minute 30 invoking the script, then
-`launchctl load` it. The script publishes and force-pushes the `data` branch
-exactly like the Action.
+`StartCalendarInterval` of Hour 9 / Minute 30 invoking the script, then
+`launchctl load` it. The script runs `scan.py --all --publish` and force-pushes
+the `data` branch exactly like the Action.
 
 ## 403 troubleshooting
 

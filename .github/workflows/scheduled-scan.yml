@@ -1,15 +1,23 @@
 name: scheduled-scan
 
-# Runs the nightly scan on GitHub's runners (a home-ish IP that Finviz is less
-# likely to 403 than the Streamlit Cloud data-center IP), then publishes the
-# result to the `data` branch, which the read-only Streamlit app is deployed
-# from. main stays code-only; the data branch is force-refreshed each run.
+# Runs ONE scan per weekday morning on GitHub's runners (a home-ish IP that
+# Finviz is less likely to 403 than the Streamlit Cloud data-center IP), then
+# publishes the result to the `data` branch, which the read-only Streamlit app
+# is deployed from. main stays code-only; the data branch is force-refreshed.
+#
+# Cadence: ONCE per day, weekdays only — never intraday, never weekends. The
+# cron must never hit Finviz more than once per day automatically.
+#
+# Note (data semantics): 9:30 AM ET is the market OPEN, so this scan reads
+# YESTERDAY's settled close plus the first ticks of today — a morning briefing,
+# not a post-close watchlist build. If you prefer settled closing prices, move
+# the cron to "30 21 * * 1-5" (17:30 ET) instead.
 
 on:
   schedule:
-    # 21:30 UTC = 17:30 ET during EDT (summer). In EST (winter) this fires at
-    # 16:30 ET — still after the 16:00 close. Adjust here if you prefer.
-    - cron: "30 21 * * 1-5"
+    # 13:30 UTC = 9:30 AM ET during EDT (summer). In EST (winter) this fires at
+    # 8:30 ET. Once per weekday.
+    - cron: "30 13 * * 1-5"
   workflow_dispatch: {}        # allow manual runs from the Actions tab
 
 permissions:
@@ -39,7 +47,7 @@ jobs:
       - name: Run scan and publish
         env:
           PINPOINT_REQUEST_DELAY: "2"      # gentler on Finviz from CI
-        run: python scan.py --publish --cache-top 250
+        run: python scan.py --all --publish --cache-top 250
 
       - name: Publish to data branch
         run: |
