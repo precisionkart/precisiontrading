@@ -146,8 +146,16 @@ def sidebar_logo() -> None:
                 unsafe_allow_html=True)
 
 
+def _n(df) -> int:
+    return 0 if df is None else len(df)
+
+
 def sidebar_footer(scan, cloud: bool) -> None:
     """Sidebar bottom: regime dot + 'Data as of HH:MM' + icon-only refresh."""
+    # Show the post-refresh success toast (survives the st.rerun via session).
+    msg = st.session_state.pop("_refresh_toast", None)
+    if msg:
+        st.toast(msg, icon="✅")
     st.markdown("<div class='pp-side-foot'></div>", unsafe_allow_html=True)
     if scan:
         color = _REGIME_COLOR.get(scan["regime"].state, "#6B7280")
@@ -155,8 +163,13 @@ def sidebar_footer(scan, cloud: bool) -> None:
                     f"</span>{scan['regime'].state.upper()}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pp-asof'>Data as of {_html.escape(scan.get('as_of') or '—')}</div>",
                     unsafe_allow_html=True)
-    if st.button("↻", key="side_refresh", help="Refresh scan"):
-        st.session_state["scan"] = load_published() if cloud else full_scan()
+    if st.button("↻", key="side_refresh", help="Refresh scan (live Finviz)"):
+        new = load_published() if cloud else full_scan()
+        st.session_state["scan"] = new
+        if new:
+            st.session_state["_refresh_toast"] = (
+                f"Refreshed: {_n(new.get('focus'))} Focus, {_n(new.get('targets'))} "
+                f"Targets, {_n(new.get('earnings'))} Earnings, {_n(new.get('ipo'))} IPOs")
         for k in ("watchlist_graded_key", "open_cards", "detail_cache", "sector_filter"):
             st.session_state.pop(k, None)
         st.rerun()
@@ -232,9 +245,20 @@ def full_scan(ignore_rvol: bool = False) -> dict:
         ref = client.fetch_universe(RS_REFERENCE_SCREEN, views=("performance",))
         if not ref.empty:
             store.save_universe_snapshot(pipeline.normalize_universe(ref.df))
-    store.save_scan_cache({"focus": focus, "targets": uni.df, "earnings": ern.df,
-                           "earnings_down": ern.down, "ipo": ipo_res.watchlist}, reg, as_of,
-                          theme_rank=theme_ctx.theme_rank)
+    lists = {"focus": focus, "targets": uni.df, "earnings": ern.df,
+             "earnings_down": ern.down, "ipo": ipo_res.watchlist}
+    with st.spinner("Updating snapshot (cache + published blob)..."):
+        store.save_scan_cache(lists, reg, as_of, theme_rank=theme_ctx.theme_rank)
+        # Re-publish latest_scan.json too so the local cache and the cloud blob
+        # are updated together (atomically from the user's POV).
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            now_utc = _dt.now(_tz.utc)
+            store.save_published_scan(reg, theme_ctx.theme_rank, lists,
+                                      as_of_et=as_of, as_of_utc=now_utc.isoformat(),
+                                      index_levels=pipeline.fetch_index_levels())
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"re-publish skipped: {exc}")
     return {"regime": RegimeView(reg.state, reg.rationale), "theme_ctx": theme_ctx,
             "themes": store._themes_list(theme_ctx.theme_rank),
             "focus": focus, "targets": uni.df, "earnings": ern.df,
