@@ -95,6 +95,52 @@ def bootstrap(title: str) -> None:
     inject_css()
 
 
+def refresh_status(scan=None, cloud: bool = None):
+    """(label, dot_color) for the 'Last refreshed' header badge. Always an
+    ABSOLUTE timestamp — never relative. Local reads the cache meta.json mtime;
+    cloud uses the published date + as_of. Dot: green <24h, amber 24-48h, red
+    >48h / missing."""
+    from datetime import datetime
+    GREEN, AMBER, RED = "#00D964", "#E8A317", "#DC2626"
+    if cloud is None:
+        cloud = cloud_mode()
+    if cloud:
+        d = (scan or {}).get("date"); aof = (scan or {}).get("as_of")
+        try:
+            dd = datetime.strptime(d, "%Y-%m-%d").date() if d else None
+        except ValueError:
+            dd = None
+        if dd is None:
+            return ("no published data", RED)
+        age = (datetime.now().date() - dd).days
+        color = GREEN if age <= 0 else AMBER if age == 1 else RED
+        return (f"{dd.strftime('%a %-d %b')}, {aof or '—'}", color)
+    # local: mtime of the scan cache meta
+    from pinpoint import store
+    meta = os.path.join(store._cache_dir(), "meta.json")
+    if not os.path.exists(meta):
+        return ("no scan yet", RED)
+    dt = datetime.fromtimestamp(os.path.getmtime(meta))
+    age_h = (datetime.now() - dt).total_seconds() / 3600.0
+    color = GREEN if age_h < 24 else AMBER if age_h < 48 else RED
+    return (dt.strftime("%a %-d %b, %H:%M") + " ET", color)
+
+
+def page_header(title: str, subtitle: str = None) -> None:
+    """Consistent page header on every page: title (left) + an absolute
+    'Last refreshed' timestamp with a status dot (right). `title` may contain
+    inline HTML; `subtitle` renders as the usual pp-sub line below."""
+    scan = st.session_state.get("scan")
+    label, color = refresh_status(scan)
+    st.markdown(
+        f"<div class='pp-header'><div class='pp-h1'>{title}</div>"
+        f"<div class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
+        f"Last refreshed: {_html.escape(label)}</div></div>",
+        unsafe_allow_html=True)
+    if subtitle:
+        st.markdown(f"<div class='pp-sub'>{subtitle}</div>", unsafe_allow_html=True)
+
+
 def sidebar_logo() -> None:
     st.markdown("<div class='pp-logo'>Pin<span class='tick'>point</span></div>",
                 unsafe_allow_html=True)

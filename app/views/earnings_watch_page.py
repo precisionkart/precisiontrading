@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common as c
 from pinpoint import earnings_watch as ew
 
-st.markdown("<div class='pp-h1'>Earnings Watch</div>", unsafe_allow_html=True)
+c.page_header("Earnings Watch")
 st.markdown("<div class='pp-sub'>Gap-ups tracked through the 1-4 week flag window. "
             "A breakout here is the strategy's highest-edge setup.</div>",
             unsafe_allow_html=True)

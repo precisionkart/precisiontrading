@@ -17,7 +17,7 @@ from pinpoint.config import CONFIG
 CLOUD = c.cloud_mode()
 scan = st.session_state.get("scan")
 
-st.markdown("<div class='pp-h1'>Today</div>", unsafe_allow_html=True)
+c.page_header("Today")
 if not scan:
     msg = ("No published scan found (data/latest_scan.json)."
            if CLOUD else "No scan yet today — hit the ↻ refresh in the sidebar.")

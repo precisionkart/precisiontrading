@@ -16,7 +16,7 @@ from pinpoint import regime as regime_mod
 CLOUD = c.cloud_mode()
 scan = st.session_state.get("scan")
 
-st.markdown("<div class='pp-h1'>Watchlist</div>", unsafe_allow_html=True)
+c.page_header("Watchlist")
 wl = store.load_watchlist()
 st.markdown(f"<div class='pp-sub'>{len(wl)} saved · re-graded fresh</div>", unsafe_allow_html=True)
 

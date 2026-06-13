@@ -13,7 +13,7 @@ from pinpoint import output, store
 from pinpoint.config import CONFIG
 
 CLOUD = c.cloud_mode()
-st.markdown("<div class='pp-h1'>Full Scan</div>", unsafe_allow_html=True)
+c.page_header("Full Scan")
 st.write("")
 
 cols = st.columns([1, 1, 4])

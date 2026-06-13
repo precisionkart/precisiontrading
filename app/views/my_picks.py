@@ -16,8 +16,7 @@ ref_df, ref_date = c.reference_universe()
 ref_tag = (f"grading against universe snapshot from {ref_date}" if ref_date else
            "no snapshot yet — RS ranked against your picks only")
 
-st.markdown(f"<div class='pp-h1'>My Picks <span class='dim'>Analyzer</span></div>"
-            f"<div class='pp-sub'>{ref_tag}</div>", unsafe_allow_html=True)
+c.page_header("My Picks <span class='dim'>Analyzer</span>", subtitle=ref_tag)
 st.write("")
 
 text = st.text_area("Tickers (comma or newline separated)",

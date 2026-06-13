@@ -17,7 +17,7 @@ import dashboard_logic as dl
 CLOUD = c.cloud_mode()
 scan = st.session_state.get("scan")
 
-st.markdown("<div class='pp-h1'>Pre-Market Briefing</div>", unsafe_allow_html=True)
+c.page_header("Pre-Market Briefing")
 if not scan:
     st.markdown("<div class='pp-sub'>No scan loaded.</div>", unsafe_allow_html=True)
     c.disclaimer_footer()
