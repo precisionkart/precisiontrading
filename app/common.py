@@ -587,14 +587,22 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
         s_cls = "e" if score >= 80 else "g" if score >= 65 else "w" if score >= 50 else ""
         if score >= 80:
             row_cls = "pp-row tier1"
+    # compact glance trio — entry / exit(stop) / R:R, or "—" when no measured plan
+    e, s_, rr_ = row.get("Entry"), row.get("Stop"), row.get("R:R")
+    if (isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_):
+        rr_txt2 = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
+        plan_txt = f"E ${e:,.2f} · X ${s_:,.2f} · {rr_txt2}"
+    else:
+        plan_txt = "—"
+    plan_html = f"<span class='plan'>{plan_txt}</span>"
     return (f"<div class='{row_cls}' id='pp-card-{tk}'>"
             f"<span class='tk'>{tk}</span>"
             f"<span class='px'>{px} {chg_html}</span>"
             f"<span class='spark'>{spark}</span>"
             f"{rs_chip_html(row.get('RS'))}"
             f"<span class='score {s_cls}'>{score_txt}</span>"
+            f"{plan_html}"
             f"<span class='pat'>{pat}</span>"
-            f"<span class='rr'>{rr_txt}</span>"
             f"<span class='sect'>{sect}</span>"
             f"{_EF_BADGE if ef else ''}"
             f"<span class='src {src_cls}'>{_html.escape(src)}</span>"

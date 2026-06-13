@@ -48,7 +48,8 @@ PILL_COLORS = {
 # ---------------------------------------------------------------------------
 # Top 10 (Focus + Watch fill).
 # ---------------------------------------------------------------------------
-TOP10_COLUMNS = ["Rank", "Ticker", "Sector", "Score", "RS", "Pattern", "R:R", "Source"]
+TOP10_COLUMNS = ["Rank", "Ticker", "Sector", "Score", "RS", "Pattern", "R:R",
+                 "Entry", "Stop", "Source"]
 
 
 def _num(v):
@@ -73,7 +74,9 @@ def build_top10(focus: Optional[pd.DataFrame], targets: Optional[pd.DataFrame],
             rows.append({"Ticker": tk, "Sector": r.get("sector") or "",
                          "Score": _num(r.get("pinpoint_score")), "RS": _num(r.get("rs")),
                          "Pattern": str(r.get("pattern") or "—").split(" /")[0],
-                         "R:R": _num(r.get("reward_risk")), "Source": "Focus"})
+                         "R:R": _num(r.get("reward_risk")),
+                         "Entry": _num(r.get("entry_trigger")), "Stop": _num(r.get("stop")),
+                         "Source": "Focus"})
     if targets is not None and len(targets):
         for _, r in targets.iterrows():
             tk = str(r.get("ticker"))
@@ -81,7 +84,8 @@ def build_top10(focus: Optional[pd.DataFrame], targets: Optional[pd.DataFrame],
                 continue
             rows.append({"Ticker": tk, "Sector": r.get("sector") or "",
                          "Score": _num(r.get("pinpoint_score")), "RS": _num(r.get("rs")),
-                         "Pattern": "—", "R:R": None, "Source": "Watch"})
+                         "Pattern": "—", "R:R": None, "Entry": None, "Stop": None,
+                         "Source": "Watch"})
 
     df = pd.DataFrame(rows)
     if len(df) == 0:
