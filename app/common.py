@@ -343,6 +343,15 @@ def full_scan(ignore_rvol: bool = False) -> dict:
              "earnings_down": ern.down, "ipo": ipo_res.watchlist}
     with st.spinner("Updating snapshot (cache + published blob)..."):
         store.save_scan_cache(lists, reg, as_of, theme_rank=theme_ctx.theme_rank)
+        # Watchlist v2: snapshot per name + resolve paper trades (tagged "manual").
+        try:
+            from pinpoint import watchlist as wl_mod
+            from pinpoint import earnings_watch as ew_mod
+            _prov = lambda t: ohlcv_mod.fetch_daily(t).df
+            wl_mod.snapshot_from_scan(focus, uni.df, ew_mod.active_ctx(),
+                                      ohlcv_provider=_prov, source="manual")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"watchlist snapshot skipped: {exc}")
         # Re-publish latest_scan.json too so the local cache and the cloud blob
         # are updated together (atomically from the user's POV).
         try:

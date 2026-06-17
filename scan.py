@@ -393,6 +393,14 @@ def publish(cache_top: int = 250) -> int:
     # Also refresh the LOCAL Dashboard cache so a local --publish (or the manual
     # Refresh button) updates both paths atomically — not just the cloud blob.
     store.save_scan_cache(lists, reg, as_of_et, theme_rank=theme_ctx.theme_rank)
+    # Watchlist v2: snapshot today's row per watchlist name (local, per-device).
+    try:
+        from pinpoint import watchlist as wl_mod
+        wl_mod.snapshot_from_scan(focus, targets, ew.active_ctx(),
+                                  ohlcv_provider=lambda t: pipeline.ohlcv_mod.fetch_daily(t).df,
+                                  source="cron")
+    except Exception as exc:  # noqa: BLE001
+        print(f"   (watchlist snapshot skipped: {exc})")
 
     blocked = _has_block(warnings)
     print(f"\n{'⚠️ Partial' if blocked else '✅'} published: "

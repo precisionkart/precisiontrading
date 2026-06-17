@@ -117,6 +117,34 @@ if len(t3):
     st.markdown(f"<div class='pp-tierpills'>{pills}</div>", unsafe_allow_html=True)
 c.scroll_to_card()   # smooth-scroll to a card opened from the podium
 
+# ---- 📌 On your watchlist (up to 5 most recently added) ----
+from pinpoint import watchlist as wl_mod  # noqa: E402
+from pinpoint import earnings_watch as ew_mod  # noqa: E402
+_wl_recent = wl_mod.recent_added(5)
+if _wl_recent:
+    st.markdown("<div class='pp-section'>📌 On your watchlist</div>", unsafe_allow_html=True)
+    _f = scan.get("focus")
+    _fmap = ({str(r["ticker"]).upper(): r for _, r in _f.iterrows()}
+             if _f is not None and len(_f) and "ticker" in _f.columns else {})
+    _ectx = ew_mod.active_ctx()
+    _pill = {"ACTIVE": ("🔥 ACTIVE", "active"), "EARNINGS": ("📈 EARNINGS", "earn"),
+             "WATCH": ("⚡ WATCH", "watch"), "DORMANT": ("💤 DORMANT", "dormant")}
+    _wl_rows = []
+    for e in _wl_recent:
+        tk = e["ticker"]
+        status = wl_mod.compute_status(tk, scan.get("focus"), scan.get("targets"), _ectx)
+        fr = _fmap.get(tk, {})
+        px = fr.get("price")
+        px_txt = f"${px:,.2f}" if isinstance(px, (int, float)) and px == px else "—"
+        ptxt, pcls = _pill[status]
+        _wl_rows.append(
+            f"<div class='pp-row'><span class='tk'>{c._html.escape(tk)}</span>"
+            f"<span class='px'>{px_txt}</span>"
+            f"<span class='pp-pill {pcls}' style='margin-left:auto'>{ptxt}</span></div>")
+    st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
+                + "".join(_wl_rows) + "</div>", unsafe_allow_html=True)
+    st.page_link("views/watchlist.py", label="Open Watchlist →")
+
 # ---- Sector / Stocks heatmap (toggleable) ----
 hcol1, hcol2 = st.columns([3, 1.4], vertical_alignment="center")
 with hcol1:

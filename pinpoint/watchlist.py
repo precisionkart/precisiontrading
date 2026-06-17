@@ -211,6 +211,48 @@ def snapshot(rows: list[dict], source: str = "cron", today: date | None = None) 
     save_history(h)
 
 
+def _index_by_ticker(df) -> dict:
+    if df is None or not hasattr(df, "columns") or "ticker" not in getattr(df, "columns", []):
+        return {}
+    return {str(r["ticker"]).upper(): r.to_dict() for _, r in df.iterrows()}
+
+
+def snapshot_from_scan(focus_df=None, targets_df=None, earnings_ctx=None,
+                       ohlcv_provider=None, source: str = "cron",
+                       today: date | None = None) -> list[dict]:
+    """Build + write one daily history row per watchlist name from today's scan,
+    and update each name's last_status. Price/RS/score come from the Focus/Targets
+    rows when present, else price falls back to cached OHLCV. Returns rows written."""
+    fmap, tmap = _index_by_ticker(focus_df), _index_by_ticker(targets_df)
+    rows = []
+    for tk in tickers():
+        status = compute_status(tk, focus_df, targets_df, earnings_ctx)
+        src = fmap.get(tk) or tmap.get(tk) or {}
+        price = src.get("price")
+        if (price is None or price != price) and ohlcv_provider is not None:
+            try:
+                d = ohlcv_provider(tk)
+                if d is not None and len(d):
+                    price = float(d["Close"].iloc[-1])
+            except Exception:  # noqa: BLE001
+                price = None
+        pat = src.get("pattern")
+        rows.append({"ticker": tk, "price": price, "rs": src.get("rs"),
+                     "score": src.get("pinpoint_score"), "status": status,
+                     "pattern": (str(pat).split(" /")[0] if pat else None)})
+        set_status(tk, status)
+    if rows:
+        snapshot(rows, source=source, today=today)
+    return rows
+
+
+def recent_added(n: int = 5) -> list[dict]:
+    """The n most recently added watchlist entries (added_date desc)."""
+    ents = load_entries()
+    ents.sort(key=lambda e: (e.get("added_date") or ""), reverse=True)
+    return ents[:n]
+
+
 def rs_series(ticker: str, n: int = 30) -> list[float]:
     hist = load_history().get(ticker.strip().upper(), {}).get("history", [])
     vals = [x.get("rs") for x in hist[-n:] if isinstance(x.get("rs"), (int, float)) and x.get("rs") == x.get("rs")]

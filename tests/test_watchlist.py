@@ -105,3 +105,34 @@ def test_paper_stats():
     assert s["total"] == 4 and s["won"] == 2 and s["lost"] == 1 and s["open"] == 1
     assert s["win_rate"] == pytest.approx(66.7, abs=0.1)
     assert s["avg_r"] == pytest.approx(3.53, abs=0.01)
+
+
+def test_snapshot_from_scan_one_row_per_name_and_status(monkeypatch):
+    wl.add("STM", today=date(2026, 6, 18))
+    wl.add("NVDA", today=date(2026, 6, 18))
+    focus = pd.DataFrame([{"ticker": "STM", "price": 73.7, "rs": 97, "pinpoint_score": 75.6,
+                           "pattern": "High & tight flag", "reward_risk": 6.6}])
+    targets = pd.DataFrame([{"ticker": "STM"}])
+    # NVDA in no list -> DORMANT, price falls back to ohlcv provider
+    prov = lambda tk: pd.DataFrame({"Close": [500.0, 510.0]}) if tk == "NVDA" else None
+    rows = wl.snapshot_from_scan(focus, targets, {}, ohlcv_provider=prov,
+                                 source="cron", today=date(2026, 6, 18))
+    assert len(rows) == 2                                  # one row per watchlist name
+    h = wl.load_history()
+    assert h["STM"]["history"][-1]["status"] == "ACTIVE"
+    assert h["STM"]["history"][-1]["rs"] == 97
+    assert h["NVDA"]["history"][-1]["status"] == "DORMANT"
+    assert h["NVDA"]["history"][-1]["price"] == 510.0      # fallback from OHLCV
+    # entry last_status updated
+    ent = {e["ticker"]: e for e in wl.load_entries()}
+    assert ent["STM"]["last_status"] == "ACTIVE" and ent["NVDA"]["last_status"] == "DORMANT"
+    # idempotent: re-run same day -> still one row each
+    wl.snapshot_from_scan(focus, targets, {}, ohlcv_provider=prov, today=date(2026, 6, 18))
+    assert len(wl.load_history()["STM"]["history"]) == 1
+
+
+def test_recent_added_order():
+    wl.add("AAA", today=date(2026, 6, 10))
+    wl.add("BBB", today=date(2026, 6, 18))
+    wl.add("CCC", today=date(2026, 6, 15))
+    assert [e["ticker"] for e in wl.recent_added(2)] == ["BBB", "CCC"]
