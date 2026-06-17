@@ -39,6 +39,37 @@ def _first_pullback_to_20(d: pd.DataFrame) -> bool:
     return bool(near and rising)
 
 
+# Book-explicit EXIT signals (Phase 11, audit-driven; PDF-211-221). Deterministic
+# numeric rules — surfaced as warnings/badges, never auto-actions.
+EXIT_SIGNAL_LABELS = {
+    "ema10_close_break": "🔔 EXIT SIGNAL — closed below 10 EMA (book trail rule)",
+    "climax_trim_5ema": "🔥 CLIMAX — 20%+ above 5 EMA (book trim signal)",
+}
+
+
+def exit_signals(d: pd.DataFrame | None) -> list[str]:
+    """Book exit/management signals on the daily OHLCV (with EMA columns):
+      - 'ema10_close_break': today's close < 10 EMA AND prior close >= 10 EMA
+        (the book's trailing-stop trigger, PDF-219).
+      - 'climax_trim_5ema': close >= 1.20 * 5 EMA — extended 20%+ above the 5 EMA
+        after a run (the book's aggressive-trim cue, PDF-220-221).
+    Returns the list of fired signal KEYS; skips silently if OHLCV/EMAs missing."""
+    out: list[str] = []
+    if d is None or len(d) < 2:
+        return out
+    last = d.iloc[-1]
+    prev = d.iloc[-2]
+    if {"EMA10", "Close"} <= set(d.columns):
+        e10, c10p = last["EMA10"], prev["EMA10"]
+        if (e10 == e10 and c10p == c10p and last["Close"] < e10 and prev["Close"] >= c10p):
+            out.append("ema10_close_break")
+    if "EMA5" in d.columns:
+        e5 = last["EMA5"]
+        if e5 == e5 and e5 > 0 and (last["Close"] - e5) / e5 >= 0.20:
+            out.append("climax_trim_5ema")
+    return out
+
+
 def compute_flags(d: pd.DataFrame | None, *, compression_score: float = 0.0,
                   slingshot: bool = False, ef_active: bool = False,
                   ema_zone: str | None = None, eps_this_y: float | None = None,

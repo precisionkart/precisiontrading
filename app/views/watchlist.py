@@ -64,7 +64,12 @@ if rm and st.button("Remove selected", key="wl_remove"):
 for i, pr in enumerate(graded):
     src = "Focus" if pr.classification == "A+" else "Watch"
     row = {"Ticker": pr.ticker, "Sector": pr.sector, "Score": pr.score, "RS": pr.rs,
-           "Pattern": pr.pattern or "—", "R:R": pr.reward_risk, "Source": src}
+           "Pattern": pr.pattern or "—", "R:R": pr.reward_risk,
+           "Entry": pr.entry, "Stop": pr.stop, "Source": src}
     c.compact_card(row, lambda tk: by_tk.get(tk), key=f"wl{i}")
+    # book exit signals surfaced inline (10-EMA close break / 20%-above-5EMA climax)
+    _exits = c.exit_signal_pills_html(getattr(pr, "exit_signals", None))
+    if _exits:
+        st.markdown(_exits, unsafe_allow_html=True)
 
 c.disclaimer_footer()

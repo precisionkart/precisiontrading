@@ -574,6 +574,8 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "slingshot_shakeout_low": sling.get("shakeout_low"),
             "flags": fl,
             "warnings": wn,
+            "exit_signals": flags_mod.exit_signals(d),
+
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
             "tier": result.tier,

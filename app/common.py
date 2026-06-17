@@ -29,6 +29,7 @@ from pinpoint import ipo as ipo_mod                   # noqa: E402
 from pinpoint import ohlcv as ohlcv_mod               # noqa: E402
 from pinpoint import charts                           # noqa: E402
 from pinpoint import position_sizing as sizing_mod    # noqa: E402
+from pinpoint import flags as flags_mod               # noqa: E402
 from pinpoint.config import CONFIG                    # noqa: E402
 from pinpoint.finviz_client import FinvizClient       # noqa: E402
 
@@ -138,6 +139,19 @@ def next_scheduled_scan():
         while cand.weekday() >= 5:                       # skip Sat/Sun
             cand += timedelta(days=1)
     return cand
+
+
+def exit_signal_pills_html(keys) -> str:
+    """Book exit-signal badge pills (10-EMA break / 20%-above-5EMA climax). Empty
+    string when none fired."""
+    if not keys:
+        return ""
+    pills = []
+    for k in keys:
+        label = flags_mod.EXIT_SIGNAL_LABELS.get(k, k)
+        cls = "climax" if k == "climax_trim_5ema" else "exit"
+        pills.append(f"<span class='pp-exit {cls}'>{_html.escape(label)}</span>")
+    return f"<div class='pp-exits'>{''.join(pills)}</div>"
 
 
 def sizing_settings() -> dict:
@@ -732,6 +746,10 @@ def render_detail_inline(pr) -> None:
                 f"<span class='note'>— based on {_s['risk_pct']:.2f}% account risk; "
                 f"adjust in Settings. Research aid, not advice.</span></div>",
                 unsafe_allow_html=True)
+        # book exit signals (10-EMA close break / 20%-above-5EMA climax)
+        _exits = exit_signal_pills_html(getattr(pr, "exit_signals", None))
+        if _exits:
+            st.markdown(_exits, unsafe_allow_html=True)
 
         # 2) plain-English explanation
         st.markdown(f"<div class='pp-explain'>{dl.setup_explanation(pr)}</div>",

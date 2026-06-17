@@ -230,6 +230,10 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
 .pp-sizing { font-size:12px; color:var(--ink); margin-top:8px; font-family:'Geist Mono',monospace; }
 .pp-sizing .note { color:var(--gray); font-size:11px; font-family:inherit; }
 .pp-podium-size { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); margin-top:6px; text-align:center; }
+.pp-exits { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.pp-exit { font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; }
+.pp-exit.exit { color:#B26A00; background:rgba(255,138,0,0.14); border:1px solid rgba(255,138,0,0.35); }
+.pp-exit.climax { color:#DC2626; background:rgba(220,38,38,0.10); border:1px solid rgba(220,38,38,0.35); }
 .pp-row .plan { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pp-stale { background:rgba(255,138,0,0.10); color:#B26A00; border:1px solid rgba(255,138,0,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

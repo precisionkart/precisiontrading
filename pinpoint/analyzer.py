@@ -112,6 +112,8 @@ class PickResult:
     # Phase 10 step 5 — plain-English flags / warnings.
     flags: list = field(default_factory=list)
     warnings: list = field(default_factory=list)
+    # Phase 11 — book exit signals (10-EMA close break, 20%-above-5EMA climax).
+    exit_signals: list = field(default_factory=list)
 
     @property
     def is_pinpoint(self) -> bool:
@@ -380,5 +382,6 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         ema_zone=ef.get("ema_zone"), eps_this_y=row.get("eps_this_y"),
         sales_growth=row.get("sales_past5y"), pct_below_high=row.get("pct_below_high"),
         stage_label=stage.label)
+    pr.exit_signals = flags_mod.exit_signals(d if have_ohlcv else None)
     pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
     return pr
