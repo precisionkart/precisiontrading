@@ -28,6 +28,7 @@ from pinpoint import themes as themes_mod             # noqa: E402
 from pinpoint import ipo as ipo_mod                   # noqa: E402
 from pinpoint import ohlcv as ohlcv_mod               # noqa: E402
 from pinpoint import charts                           # noqa: E402
+from pinpoint import position_sizing as sizing_mod    # noqa: E402
 from pinpoint.config import CONFIG                    # noqa: E402
 from pinpoint.finviz_client import FinvizClient       # noqa: E402
 
@@ -139,16 +140,52 @@ def next_scheduled_scan():
     return cand
 
 
+def sizing_settings() -> dict:
+    """User position-sizing settings (account / risk% / heat cap), cached per
+    session run. Edited on the Settings page."""
+    s = st.session_state.get("_sizing")
+    if s is None:
+        s = store.load_user_settings()
+        st.session_state["_sizing"] = s
+    return s
+
+
+def shares_for(entry, stop) -> tuple[int, float]:
+    """(share count, $ risk) for a setup at the user's account/risk%. (0, 0.0)
+    when there's no valid plan (missing entry/stop, entry==stop)."""
+    s = sizing_settings()
+    sh = sizing_mod.compute_shares(s["account"], s["risk_pct"], entry, stop)
+    return sh, sizing_mod.compute_dollar_risk(sh, entry, stop)
+
+
+def heat_badge_html() -> str:
+    """Portfolio-heat indicator for the header: 'Heat: 1.8% / 5.0% across 3 open'
+    (green/amber/red), or '0% — no open positions'."""
+    s = sizing_settings()
+    positions = sizing_mod.load_open_positions()
+    cap = s["heat_cap_pct"]
+    if not positions:
+        return ("<span class='pp-heatind' style='color:#6B7280'>"
+                "<span class='pp-rdot' style='background:#6B7280'></span>Heat: 0% — no open positions</span>")
+    heat = sizing_mod.compute_portfolio_heat(positions, s["account"])
+    color = {"green": "#00D964", "amber": "#E8A317", "red": "#DC2626"}[
+        sizing_mod.heat_status(heat, cap)]
+    return (f"<span class='pp-heatind' style='color:{color}'>"
+            f"<span class='pp-rdot' style='background:{color}'></span>"
+            f"Heat: {heat:.1f}% / {cap:.1f}% across {len(positions)} open</span>")
+
+
 def page_header(title: str, subtitle: str = None) -> None:
-    """Consistent page header on every page: title (left) + an absolute
-    'Last refreshed' timestamp with a status dot (right). `title` may contain
-    inline HTML; `subtitle` renders as the usual pp-sub line below."""
+    """Consistent page header on every page: title (left) + portfolio-heat +
+    an absolute 'Last refreshed' timestamp with a status dot (right). `title` may
+    contain inline HTML; `subtitle` renders as the usual pp-sub line below."""
     scan = st.session_state.get("scan")
     label, color = refresh_status(scan)
     st.markdown(
         f"<div class='pp-header'><div class='pp-h1'>{title}</div>"
-        f"<div class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
-        f"Last refreshed: {_html.escape(label)}</div></div>",
+        f"<div class='pp-headmeta'>{heat_badge_html()}"
+        f"<span class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
+        f"Last refreshed: {_html.escape(label)}</span></div></div>",
         unsafe_allow_html=True)
     if subtitle:
         st.markdown(f"<div class='pp-sub'>{subtitle}</div>", unsafe_allow_html=True)
@@ -604,7 +641,9 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
     e, s_, rr_ = row.get("Entry"), row.get("Stop"), row.get("R:R")
     if (isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_):
         rr_txt2 = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
-        plan_txt = f"E ${e:,.2f} · X ${s_:,.2f} · {rr_txt2}"
+        sh, _dr = shares_for(e, s_)
+        sh_txt = f" · {sh} sh" if sh > 0 else ""
+        plan_txt = f"E ${e:,.2f} · X ${s_:,.2f} · {rr_txt2}{sh_txt}"
     else:
         plan_txt = "—"
     plan_html = f"<span class='plan'>{plan_txt}</span>"
@@ -685,6 +724,14 @@ def render_detail_inline(pr) -> None:
             f"<div class='pp-cell'><div class='k'>R:R</div>"
             f"<div class='v'>{_fmt(pr.reward_risk, 1)}:1</div></div>"
             "</div>", unsafe_allow_html=True)
+        _sh, _dr = shares_for(pr.entry, pr.stop)
+        if _sh > 0:
+            _s = sizing_settings()
+            st.markdown(
+                f"<div class='pp-sizing'>Shares: <b>{_sh}</b> · Risk: <b>${_dr:,.0f}</b> "
+                f"<span class='note'>— based on {_s['risk_pct']:.2f}% account risk; "
+                f"adjust in Settings. Research aid, not advice.</span></div>",
+                unsafe_allow_html=True)
 
         # 2) plain-English explanation
         st.markdown(f"<div class='pp-explain'>{dl.setup_explanation(pr)}</div>",
@@ -800,13 +847,16 @@ def _podium_card_html(rank: int, row: dict) -> str:
     grid = ("<div class='pp-podium-grid'>"
             + cell("Entry", f"${_fmt(e)}", "green") + cell("Stop", f"${_fmt(s)}", "red")
             + cell("Target", f"${_fmt(t)}") + cell("R:R", f"{_fmt(rr,1)}:1") + "</div>")
+    sh, dr = shares_for(e, s)
+    size = (f"<div class='pp-podium-size'>Shares: {sh} · Risk: ${dr:,.0f}</div>"
+            if sh > 0 else "")
     ef = f"<div class='pp-podium-ef'>{_EF_BADGE}</div>" if row.get("earnings_flag") else ""
     return (f"<div class='pp-podium {'best' if best else ''}'>{label}"
             f"<div class='pp-podium-rank'>#{rank}</div>"
             f"<div class='pp-podium-tk'>{tk} {rs_chip_html(row.get('rs'))}</div>"
             f"<div class='pp-podium-sect'>{sect} · {pat}</div>"
             f"<div class='pp-podium-score'>Score {_fmt(row.get('score'), 1)}</div>"
-            f"{grid}{ef}</div>")
+            f"{grid}{size}{ef}</div>")
 
 
 def render_podium(focus_rows: list) -> None:

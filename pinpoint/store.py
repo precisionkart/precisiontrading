@@ -67,6 +67,48 @@ def save_watchlist(tickers: list[str]) -> None:
         logger.warning("watchlist write failed: %s", exc)
 
 
+def _user_settings_path() -> str:
+    return os.path.join(CONFIG.paths.data_dir, "user_settings.json")
+
+
+def load_user_settings() -> dict:
+    """Persisted user settings (position-sizing config). Falls back to defaults
+    for any missing/invalid key."""
+    from .position_sizing import DEFAULTS
+    out = dict(DEFAULTS)
+    path = _user_settings_path()
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            for k in DEFAULTS:
+                if k in data:
+                    try:
+                        out[k] = float(data[k])
+                    except (TypeError, ValueError):
+                        pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("user settings read failed: %s", exc)
+    return out
+
+
+def save_user_settings(settings: dict) -> None:
+    from .position_sizing import DEFAULTS
+    merged = load_user_settings()
+    for k in DEFAULTS:
+        if k in settings:
+            try:
+                merged[k] = float(settings[k])
+            except (TypeError, ValueError):
+                pass
+    try:
+        os.makedirs(CONFIG.paths.data_dir, exist_ok=True)
+        with open(_user_settings_path(), "w", encoding="utf-8") as f:
+            json.dump(merged, f, indent=2)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("user settings write failed: %s", exc)
+
+
 def add_to_watchlist(ticker: str) -> list[str]:
     wl = load_watchlist()
     t = ticker.strip().upper()

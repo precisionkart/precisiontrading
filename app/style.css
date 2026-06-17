@@ -225,6 +225,11 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
 .pp-header { display:flex; align-items:baseline; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .pp-refresh { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); white-space:nowrap; }
 .pp-rdot { display:inline-block; width:8px; height:8px; border-radius:999px; margin-right:6px; vertical-align:middle; }
+.pp-headmeta { display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+.pp-heatind { font-family:'Geist Mono',monospace; font-size:12px; white-space:nowrap; }
+.pp-sizing { font-size:12px; color:var(--ink); margin-top:8px; font-family:'Geist Mono',monospace; }
+.pp-sizing .note { color:var(--gray); font-size:11px; font-family:inherit; }
+.pp-podium-size { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); margin-top:6px; text-align:center; }
 .pp-row .plan { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pp-stale { background:rgba(255,138,0,0.10); color:#B26A00; border:1px solid rgba(255,138,0,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
