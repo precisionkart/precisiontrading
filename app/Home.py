@@ -19,8 +19,11 @@ def _load_scan():
     if CLOUD:
         return c.load_published()
     cache = store.load_scan_cache()
-    if cache is None or not cache.is_today:
-        return None
+    if cache is None:
+        return None                      # truly no scan -> the dashboard empty state
+    # Load the most recent scan regardless of age. The prominent "Last refreshed"
+    # badge (green/amber/red) communicates staleness — blanking real data behind
+    # an is_today gate just hid usable setups between scans.
     return {"regime": c.RegimeView(cache.regime_state, cache.regime_rationale),
             "theme_ctx": None, "themes": cache.themes,
             "focus": cache.lists.get("focus"), "targets": cache.lists.get("targets"),

@@ -43,6 +43,15 @@ st.markdown(
     f"<b>{_rstate.upper()}</b>): <b>{c.regime_exposure(_rstate)}</b> "
     f"<span class='note'>— a suggestion, not a prescription; you size the trade.</span></div>",
     unsafe_allow_html=True)
+# Stale-data banner: if the loaded scan isn't from today, say so plainly so old
+# setups are never mistaken for fresh ones (the header dot already flags it).
+_lbl, _col = c.refresh_status(scan)
+if _col != "#00D964":
+    nxt = c.next_scheduled_scan().strftime("%a %-d %b, 09:30")
+    st.markdown(
+        f"<div class='pp-stale'>⚠ Showing the last scan ({c._html.escape(_lbl)}) — "
+        f"not from today. Hit ↻ in the sidebar to run a fresh one, or wait for the "
+        f"next scheduled scan: {nxt} ET.</div>", unsafe_allow_html=True)
 c.warning_banner(scan.get("warnings"))
 
 # ---- Top 3 Podium — Tier 1/2 (>=65) qualifying, enriched setups ONLY ----
