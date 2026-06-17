@@ -141,6 +141,36 @@ def next_scheduled_scan():
     return cand
 
 
+def _wl_members() -> set:
+    """Watchlist tickers, cached per script run (invalidated on toggle)."""
+    m = st.session_state.get("_wl_members")
+    if m is None:
+        m = set(store.load_watchlist())
+        st.session_state["_wl_members"] = m
+    return m
+
+
+def star_button(ticker: str, key: str) -> None:
+    """A ★ quick-add toggle. Filled green when on the watchlist, gray when not.
+    Single click toggles + persists immediately + toasts (no confirm dialog)."""
+    tk = str(ticker).strip().upper()
+    if not tk:
+        return
+    member = tk in _wl_members()
+    # st-key-star{on,off}_* drives the CSS color (green vs gray); see style.css.
+    kk = f"star{'on' if member else 'off'}_{key}"
+    if st.button("★", key=kk, help=("Remove from" if member else "Add to") + " watchlist"):
+        if member:
+            store.remove_from_watchlist(tk)
+            st.toast(f"Removed {tk} from watchlist")
+        else:
+            store.add_to_watchlist(tk)
+            st.toast(f"Added {tk} to watchlist")
+        for k in ("_wl_members", "wlpage_key", "wlstrip_key", "wlpage"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+
 def exit_signal_pills_html(keys) -> str:
     """Book exit-signal badge pills (10-EMA break / 20%-above-5EMA climax). Empty
     string when none fired."""
@@ -428,9 +458,10 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
 </div>""", unsafe_allow_html=True)
 
 
-def earnings_panel(df, title: str, direction: str, universe_tickers=None) -> None:
-    """One earnings-gap panel (up or down). A ★ marks names in the broad scan
-    universe. Gap-down names are AVOID signals, not trade candidates (step 8)."""
+def earnings_panel(df, title: str, direction: str, universe_tickers=None,
+                   key_prefix: str = "") -> None:
+    """One earnings-gap panel (up or down) with a ★ quick-add per row. A '◆' marks
+    names already in the broad scan universe. Gap-down names are AVOID signals."""
     universe_tickers = universe_tickers or set()
     st.markdown(f"<div class='pp-eh {direction}'>{_html.escape(title)} "
                 f"({0 if df is None else len(df)})</div>", unsafe_allow_html=True)
@@ -438,23 +469,24 @@ def earnings_panel(df, title: str, direction: str, universe_tickers=None) -> Non
         st.markdown("<div class='pp-empty'>None.</div>", unsafe_allow_html=True)
         return
     color = "#00D964" if direction == "up" else "#FF3366"
-    rows = []
-    for _, r in df.iterrows():
+    for i, (_, r) in enumerate(df.iterrows()):
+        tk = str(r.get("ticker", ""))
         gap = r.get("gap")
         gtxt = (f"{'+' if gap >= 0 else ''}{gap:.1f}%"
                 if isinstance(gap, (int, float)) and gap == gap else "—")
-        star = " ★" if str(r.get("ticker")) in universe_tickers else ""
+        inuni = " ◆" if tk in universe_tickers else ""
         eps = r.get("eps_this_y")
         eps_txt = (f"<span class='eps'>EPS {eps:.0f}%</span>"
                    if isinstance(eps, (int, float)) and eps == eps else "")
         px = f"${r.get('price'):,.2f}" if r.get("price") == r.get("price") else "—"
-        rows.append(
-            f"<div class='pp-row'><span class='tk'>{_html.escape(str(r.get('ticker','')))}{star}</span>"
+        rc, sc = st.columns([10, 1], vertical_alignment="center")
+        rc.markdown(
+            f"<div class='pp-row'><span class='tk'>{_html.escape(tk)}{inuni}</span>"
             f"<span class='px'>{px}</span>"
             f"<span class='score' style='color:{color};width:64px'>{gtxt}</span>"
-            f"{rs_chip_html(r.get('rs'))}{eps_txt}</div>")
-    st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
-                + "".join(rows) + "</div>", unsafe_allow_html=True)
+            f"{rs_chip_html(r.get('rs'))}{eps_txt}</div>", unsafe_allow_html=True)
+        with sc:
+            star_button(tk, key=f"ern_{key_prefix}{direction}_{i}_{tk}")
 
 
 def flags_warnings_html(row) -> str:
@@ -690,8 +722,10 @@ def compact_card(row: dict, detail_fn, key: str, ef: bool = False) -> None:
     price = float(closes[-1]) if closes else float("nan")
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
-    c1, c2 = st.columns([24, 1], vertical_alignment="center")
+    c1, cstar, c2 = st.columns([22, 1, 1], vertical_alignment="center")
     c1.markdown(_row_html(row, spark, price, chg, ef=ef), unsafe_allow_html=True)
+    with cstar:
+        star_button(tk, key=f"row_{key}")
     if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
         (open_set.discard if is_open else open_set.add)(tk)
         st.rerun()
@@ -886,8 +920,11 @@ def render_podium(focus_rows: list) -> None:
             if i < len(focus_rows):
                 row = focus_rows[i]
                 st.markdown(_podium_card_html(i + 1, row), unsafe_allow_html=True)
-                if st.button("Open chart →", key=f"pod_open_{row['ticker']}",
-                             use_container_width=True):
+                pc1, pc2 = st.columns([4, 1], vertical_alignment="center")
+                with pc2:
+                    star_button(row["ticker"], key=f"pod_{row['ticker']}")
+                if pc1.button("Open chart →", key=f"pod_open_{row['ticker']}",
+                              use_container_width=True):
                     st.session_state.setdefault("open_cards", set()).add(row["ticker"])
                     st.session_state["scroll_to"] = row["ticker"]
                     st.rerun()

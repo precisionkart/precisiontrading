@@ -69,4 +69,18 @@ st.markdown(f"<div class='pp-section'>{len(store)} tracked · {n_active} in wind
             f"{n_trig} breaking out</div>", unsafe_allow_html=True)
 st.dataframe(df, use_container_width=True, hide_index=True)
 
+# ★ quick-add for tracked names (dataframes can't host per-row buttons)
+tracked = [e["ticker"] for e in sorted(store, key=lambda x: x.get("gap_date", ""), reverse=True)]
+if tracked:
+    st.markdown("<div class='pp-section' style='font-size:12px'>★ Add to watchlist</div>",
+                unsafe_allow_html=True)
+    cols = st.columns(min(6, len(tracked)))
+    for j, tk in enumerate(tracked):
+        with cols[j % len(cols)]:
+            nc, sc = st.columns([2, 1], vertical_alignment="center")
+            nc.markdown(f"<span class='pp-tierpill'>{c._html.escape(str(tk))}</span>",
+                        unsafe_allow_html=True)
+            with sc:
+                c.star_button(tk, key=f"ew_{j}_{tk}")
+
 c.disclaimer_footer()

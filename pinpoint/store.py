@@ -47,24 +47,23 @@ def _watchlist_path() -> str:
 
 
 def load_watchlist() -> list[str]:
-    path = _watchlist_path()
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return list(dict.fromkeys(str(t).upper() for t in data))   # dedup, preserve order
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("watchlist read failed: %s", exc)
-        return []
+    """Ticker list (back-compat). The rich board lives in pinpoint/watchlist.py."""
+    from . import watchlist as wl_mod
+    return wl_mod.tickers()
 
 
 def save_watchlist(tickers: list[str]) -> None:
-    try:
-        with open(_watchlist_path(), "w", encoding="utf-8") as f:
-            json.dump(list(dict.fromkeys(t.upper() for t in tickers)), f, indent=2)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("watchlist write failed: %s", exc)
+    """Back-compat setter — preserves existing metadata for kept names, drops
+    removed ones, adds new ones with today's added_date."""
+    from . import watchlist as wl_mod
+    want = list(dict.fromkeys(t.upper() for t in tickers))
+    existing = {e["ticker"]: e for e in wl_mod.load_entries()}
+    from datetime import date as _date
+    entries = []
+    for t in want:
+        entries.append(existing.get(t, {"ticker": t, "added_date": _date.today().isoformat(),
+                                         "notes": "", "last_status": None}))
+    wl_mod.save_entries(entries)
 
 
 def _user_settings_path() -> str:
@@ -110,18 +109,13 @@ def save_user_settings(settings: dict) -> None:
 
 
 def add_to_watchlist(ticker: str) -> list[str]:
-    wl = load_watchlist()
-    t = ticker.strip().upper()
-    if t and t not in wl:
-        wl.append(t)
-        save_watchlist(wl)
-    return wl
+    from . import watchlist as wl_mod
+    return wl_mod.add(ticker)
 
 
 def remove_from_watchlist(ticker: str) -> list[str]:
-    wl = [t for t in load_watchlist() if t != ticker.strip().upper()]
-    save_watchlist(wl)
-    return wl
+    from . import watchlist as wl_mod
+    return wl_mod.remove(ticker)
 
 
 # ---------------------------------------------------------------------------

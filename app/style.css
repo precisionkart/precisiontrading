@@ -234,6 +234,11 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
 .pp-exit { font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px; }
 .pp-exit.exit { color:#B26A00; background:rgba(255,138,0,0.14); border:1px solid rgba(255,138,0,0.35); }
 .pp-exit.climax { color:#DC2626; background:rgba(220,38,38,0.10); border:1px solid rgba(220,38,38,0.35); }
+/* ★ quick-add toggle (color by st-key prefix: on=green, off=gray) */
+[class*="st-key-star"] button { min-height:0 !important; padding:1px 8px !important; border-radius:999px !important;
+  font-size:17px !important; line-height:1.2 !important; }
+[class*="st-key-staron"] button { color:#00D964 !important; border-color:#00D964 !important; }
+[class*="st-key-staroff"] button { color:#9AA0A6 !important; }
 .pp-row .plan { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pp-stale { background:rgba(255,138,0,0.10); color:#B26A00; border:1px solid rgba(255,138,0,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }

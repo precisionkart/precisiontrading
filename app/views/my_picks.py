@@ -83,9 +83,9 @@ if results:
                 f"{n_near} near, {n_fail} not setups</div>", unsafe_allow_html=True)
     for pr in results:
         c.pick_card(pr)
-        if st.button("★ Save", key=f"save_{pr.ticker}"):
-            store.add_to_watchlist(pr.ticker)
-            st.toast(f"{pr.ticker} added to watchlist")
+        sc1, sc2 = st.columns([8, 1], vertical_alignment="center")
+        with sc2:
+            c.star_button(pr.ticker, key=f"mp_{pr.ticker}")
 
     st.markdown("<div class='pp-section'>Copy to TradingView</div>", unsafe_allow_html=True)
     actionable = [r.ticker for r in results if r.classification in ("A+", "near")]

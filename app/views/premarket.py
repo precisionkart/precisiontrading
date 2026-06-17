@@ -84,10 +84,16 @@ st.markdown(
 for label, grp in (("🔥 Tier 1 — Elite", t1), ("⚡ Tier 2 — Good", t2), ("👀 Tier 3 — Watchlist", t3)):
     if not len(grp):
         continue
-    pills = "".join(
-        f"<span class='pp-tierpill'>{c._html.escape(str(r.get('Ticker')))}"
-        f"<b>{r.get('Score'):.0f}</b></span>" for _, r in grp.iterrows())
-    st.markdown(f"<div class='pp-section' style='font-size:12px'>{label}</div>"
-                f"<div class='pp-tierpills'>{pills}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='pp-section' style='font-size:12px'>{label}</div>",
+                unsafe_allow_html=True)
+    cols = st.columns(min(5, len(grp)))                # name + ★ per cell
+    for j, (_, r) in enumerate(grp.iterrows()):
+        tk = str(r.get("Ticker"))
+        with cols[j % len(cols)]:
+            nc, sc = st.columns([3, 1], vertical_alignment="center")
+            nc.markdown(f"<span class='pp-tierpill'>{c._html.escape(tk)}"
+                        f"<b>{r.get('Score'):.0f}</b></span>", unsafe_allow_html=True)
+            with sc:
+                c.star_button(tk, key=f"pm_{label[:2]}_{j}_{tk}")
 
 c.disclaimer_footer()
