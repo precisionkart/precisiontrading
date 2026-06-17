@@ -16,9 +16,15 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .mono, .pp-num { font-family: 'Geist Mono', ui-monospace, monospace !important;
   font-variant-numeric: tabular-nums; }
 
-/* clean canvas */
+/* clean canvas — hide the toolbar/menu noise, but NOT the whole header: the
+   header hosts the sidebar expand control, so nuking it strands a collapsed
+   sidebar with no way to reopen it. */
 #MainMenu, footer, .stDeployButton, [data-testid="stToolbar"],
-[data-testid="stStatusWidget"], [data-testid="stHeader"] { display: none !important; }
+[data-testid="stStatusWidget"] { display: none !important; }
+[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
+/* always keep the sidebar collapse/expand controls reachable */
+[data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"] { display: flex !important; visibility: visible !important; }
 
 /* headings */
 .pp-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
