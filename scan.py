@@ -396,9 +396,10 @@ def publish(cache_top: int = 250) -> int:
     # Watchlist v2: snapshot today's row per watchlist name (local, per-device).
     try:
         from pinpoint import watchlist as wl_mod
+        _wprov = lambda t: pipeline.ohlcv_mod.fetch_daily(t).df
         wl_mod.snapshot_from_scan(focus, targets, ew.active_ctx(),
-                                  ohlcv_provider=lambda t: pipeline.ohlcv_mod.fetch_daily(t).df,
-                                  source="cron")
+                                  ohlcv_provider=_wprov, source="cron")
+        wl_mod.resolve_trades(_wprov)          # resolve open paper-trades vs today's OHLCV
     except Exception as exc:  # noqa: BLE001
         print(f"   (watchlist snapshot skipped: {exc})")
 

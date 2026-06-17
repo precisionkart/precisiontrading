@@ -17,6 +17,7 @@ import common as c
 import dashboard_logic as dl
 from pinpoint import store, analyzer, watchlist as wl
 from pinpoint import earnings_watch as ew
+from pinpoint import ohlcv as ohlcv_mod
 from pinpoint import themes as themes_mod
 from pinpoint import regime as regime_mod
 
@@ -156,5 +157,51 @@ for i, r in enumerate(rows):
     # book exit signals if firing
     if pr is not None and getattr(pr, "exit_signals", None):
         st.markdown(c.exit_signal_pills_html(pr.exit_signals), unsafe_allow_html=True)
+    # paper-trade: mark an ACTIVE setup as "would have traded"
+    if status == "ACTIVE" and pr is not None and pr.entry and pr.stop and pr.target:
+        open_tks = {t["ticker"] for t in wl.load_trades()
+                    if str(t.get("status")) in ("open", "open_aged")}
+        if tk in open_tks:
+            st.caption(f"📝 open paper-trade already logged for {tk}")
+        elif st.button(f"📝 Mark {tk} as would-have-traded", key=f"mark_{tk}"):
+            sh, _dr = c.shares_for(pr.entry, pr.stop)
+            wl.mark_paper_trade(tk, pr.entry, pr.stop, pr.target, pr.reward_risk, sh)
+            st.toast(f"Marked {tk} as would-have-traded")
+            st.rerun()
+
+# ---- PAPER TRADES ----
+st.markdown("<div class='pp-section'>📝 Paper trades</div>", unsafe_allow_html=True)
+# resolve open trades against cached OHLCV (idempotent), then show
+wl.resolve_trades(lambda t: ohlcv_mod.fetch_daily(t, cache_only=True).df)
+trades = sorted(wl.load_trades(), key=lambda t: t.get("marked_date", ""), reverse=True)
+if not trades:
+    st.markdown("<div class='pp-empty'>No paper trades yet. Mark an ACTIVE setup above "
+                "as 'would have traded' to start your track record.</div>", unsafe_allow_html=True)
+else:
+    s = wl.paper_stats(trades)
+    wr = f"{s['win_rate']:.1f}%" if s["win_rate"] is not None else "—"
+    ar = f"{'+' if (s['avg_r'] or 0) >= 0 else ''}{s['avg_r']:.1f}" if s["avg_r"] is not None else "—"
+    st.markdown(
+        f"<div class='pp-tiercount'>Total: {s['total']} · Open: {s['open']} · "
+        f"Won: {s['won']} · Lost: {s['lost']} · Win rate: {wr} · Avg R: {ar}</div>",
+        unsafe_allow_html=True)
+    _sc = {"won": "won", "lost": "lost", "open": "openp", "open_aged": "openp"}
+    _sl = {"won": "WON", "lost": "LOST", "open": "OPEN", "open_aged": "OPEN (aged)"}
+    rows_html = []
+    for t in trades:
+        stt = str(t.get("status", "open"))
+        ra = t.get("r_achieved")
+        ra_txt = (f"{'+' if ra >= 0 else ''}{ra:.1f}R" if isinstance(ra, (int, float)) else "—")
+        rows_html.append(
+            f"<div class='pp-row pt {_sc.get(stt,'openp')}'>"
+            f"<span class='tk'>{c._html.escape(str(t.get('ticker')))}</span>"
+            f"<span class='px'>{str(t.get('marked_date',''))[:10]}</span>"
+            f"<span class='pt-c'>E ${t.get('entry'):,.2f}</span>"
+            f"<span class='pt-c'>X ${t.get('stop'):,.2f}</span>"
+            f"<span class='pt-c'>T ${t.get('target'):,.2f}</span>"
+            f"<span class='pt-status {_sc.get(stt,'openp')}'>{_sl.get(stt,'OPEN')}</span>"
+            f"<span class='pt-r'>{ra_txt}</span></div>")
+    st.markdown("<div style='display:flex;flex-direction:column;gap:5px'>"
+                + "".join(rows_html) + "</div>", unsafe_allow_html=True)
 
 c.disclaimer_footer()

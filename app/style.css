@@ -255,6 +255,15 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
 .pp-pill.earn { color:#fff; background:#1F9E5A; }
 .pp-pill.watch { color:#3D2C00; background:#FFB800; }
 .pp-pill.dormant { color:var(--gray); background:var(--panel,#EEE); }
+/* Paper-trade rows */
+.pp-row.pt { border-left:3px solid var(--border); }
+.pp-row.pt.won { border-left-color:var(--up); } .pp-row.pt.lost { border-left-color:var(--down); }
+.pp-row.pt .pt-c { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); width:96px; }
+.pp-row.pt .pt-status { margin-left:auto; font-weight:700; font-size:11px; padding:1px 8px; border-radius:999px; }
+.pt-status.won { color:#062B16; background:#00D964; } .pt-status.lost { color:#fff; background:#FF3366; }
+.pt-status.openp { color:var(--gray); background:var(--panel,#EEE); }
+.pp-row.pt .pt-r { font-family:'Geist Mono',monospace; font-size:12px; width:60px; text-align:right; }
+.pp-row.pt.won .pt-r { color:var(--up); } .pp-row.pt.lost .pt-r { color:var(--down); }
 .pp-row .plan { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pp-stale { background:rgba(255,138,0,0.10); color:#B26A00; border:1px solid rgba(255,138,0,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
