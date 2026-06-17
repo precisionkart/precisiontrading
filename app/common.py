@@ -746,6 +746,47 @@ def render_treemap(rows, key: str = "treemap"):
     return None
 
 
+def _fmt_cap(mc) -> str:
+    if not isinstance(mc, (int, float)) or mc != mc or mc <= 0:
+        return "—"
+    if mc >= 1e12: return f"${mc/1e12:.1f}T"
+    if mc >= 1e9:  return f"${mc/1e9:.1f}B"
+    if mc >= 1e6:  return f"${mc/1e6:.0f}M"
+    return f"${mc:.0f}"
+
+
+def render_stocks_heatmap(groups) -> None:
+    """Stocks-view heatmap: tiles per Targets name, sized by market cap, colored
+    by today's % change, grouped under sector headers. Visual-only — the
+    selectbox alongside drives the filter (same as the Industries view)."""
+    if not groups:
+        st.markdown("<div class='pp-empty'>No Targets to map — run a scan.</div>",
+                    unsafe_allow_html=True)
+        return
+    blocks = []
+    for g in groups:
+        tiles = []
+        for t in g["tiles"]:
+            chg = t.get("change")
+            chg_txt = (f"{'+' if chg >= 0 else ''}{chg:.1f}%"
+                       if isinstance(chg, (int, float)) and chg == chg else "—")
+            sc = t.get("score")
+            sc_txt = f"score {sc:.0f}" if isinstance(sc, (int, float)) and sc == sc else ""
+            hover = _html.escape(f"{t['ticker']} · {g['sector']} · {chg_txt} · {sc_txt} · "
+                                 f"cap {_fmt_cap(t.get('market_cap'))}")
+            grow = max(0.6, float(t.get("weight", 1.0)))
+            tiles.append(
+                f"<div class='pp-heat-tile' title='{hover}' "
+                f"style='flex:{grow} 1 90px;background:{t['color']}'>"
+                f"<span class='name'>{_html.escape(t['ticker'])}</span>"
+                f"<span class='rs'>{chg_txt}</span></div>")
+        blocks.append(
+            f"<div class='pp-sheat-head'>{_html.escape(g['sector'])} "
+            f"<span class='cap'>{_fmt_cap(g['total_cap'])}</span></div>"
+            f"<div class='pp-heat'>{''.join(tiles)}</div>")
+    st.markdown("".join(blocks), unsafe_allow_html=True)
+
+
 def _podium_card_html(rank: int, row: dict) -> str:
     best = rank == 1
     label = "<div class='pp-podium-label'>Best setup today</div>" if best else ""

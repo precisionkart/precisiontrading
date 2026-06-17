@@ -194,3 +194,30 @@ def test_build_podium_empty_when_nothing_qualifies():
     assert dl.build_podium(focus) == []
     assert dl.build_podium(None) == []
     assert dl.build_podium(pd.DataFrame()) == []
+
+
+def test_change_color_directions():
+    assert dl.change_color(None) == "#6B7280"            # missing -> gray
+    assert dl.change_color(0.0) == "#6B7280"             # flat -> gray
+    up, down = dl.change_color(4.0), dl.change_color(-4.0)
+    assert up.startswith("#") and down.startswith("#") and up != down
+    # strong up should be greener than weak up
+    assert dl.change_color(5.0) != dl.change_color(0.5)
+
+
+def test_stocks_heatmap_groups_sizes_and_colors():
+    targets = pd.DataFrame([
+        dict(ticker="AAA", sector="Technology", market_cap=2e12, change=3.0, pinpoint_score=80),
+        dict(ticker="BBB", sector="Technology", market_cap=5e11, change=-2.0, pinpoint_score=70),
+        dict(ticker="CCC", sector="Energy", market_cap=8e11, change=1.0, pinpoint_score=60),
+    ])
+    groups = dl.stocks_heatmap(targets)
+    # grouped by sector, sorted by total market cap (Tech 2.5T > Energy 0.8T)
+    assert [g["sector"] for g in groups] == ["Technology", "Energy"]
+    tech = groups[0]["tiles"]
+    assert [t["ticker"] for t in tech] == ["AAA", "BBB"]      # within sector by cap desc
+    assert tech[0]["weight"] >= tech[1]["weight"]             # bigger cap -> bigger tile
+    assert tech[0]["color"] != tech[1]["color"]               # up vs down colored differently
+    # sector filter narrows to one group
+    assert [g["sector"] for g in dl.stocks_heatmap(targets, "Energy")] == ["Energy"]
+    assert dl.stocks_heatmap(None) == [] and dl.stocks_heatmap(pd.DataFrame()) == []

@@ -199,6 +199,7 @@ COLUMN_CANDIDATES: dict[str, list[str]] = {
     "eps_past5y": ["EPS past 5Y", "EPS growth past 5 years"],
     "sales_past5y": ["Sales past 5Y", "Sales growth past 5 years"],
     "change": ["Change"],
+    "market_cap": ["Market Cap", "Market Capitalization"],
 }
 
 

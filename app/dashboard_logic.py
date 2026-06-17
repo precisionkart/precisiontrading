@@ -232,6 +232,55 @@ def heatmap_tiles(rows: list) -> list[dict]:
     return out
 
 
+def change_color(change: Optional[float], cap: float = 5.0) -> str:
+    """Stock tile color by today's % change: fluoro green up, fluoro red down,
+    gray flat/missing. Intensity saturates at +/-`cap`%."""
+    if change is None or (isinstance(change, float) and change != change):
+        return "#6B7280"
+    frac = max(-1.0, min(1.0, change / cap))
+    if frac > 0:
+        return _lerp_hex("#166534", "#00D964", frac)
+    if frac < 0:
+        return _lerp_hex("#7A1228", "#FF3366", -frac)
+    return "#6B7280"
+
+
+def stocks_heatmap(targets, sector_filter: Optional[str] = None) -> list[dict]:
+    """Stocks-view heatmap (Phase 10.x): one tile per Targets name, sized by
+    market cap, colored by today's % change, grouped under sector headers.
+    Returns [{sector, tiles:[{ticker, change, market_cap, score, color, weight}]}]
+    sorted by sector total market cap. Uses only cached Targets columns."""
+    if targets is None or len(targets) == 0 or "ticker" not in getattr(targets, "columns", []):
+        return []
+    df = targets
+    if sector_filter:
+        df = df[df["sector"] == sector_filter]
+    groups: dict[str, list] = {}
+    for _, r in df.iterrows():
+        mc = r.get("market_cap")
+        mc = float(mc) if isinstance(mc, (int, float)) and mc == mc and mc > 0 else np.nan
+        chg = r.get("change")
+        chg = float(chg) if isinstance(chg, (int, float)) and chg == chg else None
+        sector = str(r.get("sector") or "—")
+        groups.setdefault(sector, []).append({
+            "ticker": str(r.get("ticker")), "change": chg, "market_cap": mc,
+            "score": r.get("pinpoint_score"), "color": change_color(chg)})
+    # size weight within a sane band (so a mega-cap doesn't dwarf the rest)
+    out = []
+    for sector, tiles in groups.items():
+        caps = [t["market_cap"] for t in tiles if t["market_cap"] == t["market_cap"]]
+        cmax = max(caps) if caps else 1.0
+        for t in tiles:
+            mc = t["market_cap"]
+            t["weight"] = (0.6 + 1.4 * (mc / cmax)) if (mc == mc and cmax > 0) else 0.6
+        tiles.sort(key=lambda x: (x["market_cap"] if x["market_cap"] == x["market_cap"] else 0),
+                   reverse=True)
+        total = sum(caps) if caps else 0.0
+        out.append({"sector": sector, "tiles": tiles, "total_cap": total})
+    out.sort(key=lambda g: g["total_cap"], reverse=True)
+    return out
+
+
 def delta_str(delta: Optional[float]) -> str:
     if delta is None:
         return "—"

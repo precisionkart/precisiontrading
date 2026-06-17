@@ -162,6 +162,11 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
   align-items: center; justify-content: center; color: #fff; padding: 10px 14px; text-align: center; }
 .pp-heat-tile .name { font-weight: 600; font-size: 14px; letter-spacing: -0.01em; }
 .pp-heat-tile .rs { font-family: 'Geist Mono', monospace; font-size: 12px; opacity: 0.92; margin-top: 2px; }
+/* Stocks-view sector group headers */
+.pp-sheat-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--gray); margin: 12px 0 2px; }
+.pp-sheat-head .cap { font-family: 'Geist Mono', monospace; font-weight: 500; text-transform: none;
+  letter-spacing: 0; margin-left: 6px; opacity: 0.8; }
 
 /* plotly charts sit directly on the white page — no container fill/padding */
 [data-testid="stPlotlyChart"] { background: transparent !important; }

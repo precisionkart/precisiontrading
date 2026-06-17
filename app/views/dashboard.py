@@ -117,8 +117,14 @@ if len(t3):
     st.markdown(f"<div class='pp-tierpills'>{pills}</div>", unsafe_allow_html=True)
 c.scroll_to_card()   # smooth-scroll to a card opened from the podium
 
-# ---- Sector treemap ----
-st.markdown("<div class='pp-section'>Sector Heatmap</div>", unsafe_allow_html=True)
+# ---- Sector / Stocks heatmap (toggleable) ----
+hcol1, hcol2 = st.columns([3, 1.4], vertical_alignment="center")
+with hcol1:
+    st.markdown("<div class='pp-section'>Sector Heatmap</div>", unsafe_allow_html=True)
+with hcol2:
+    hmview = st.radio("Heatmap view", ["Industries", "Stocks"], horizontal=True,
+                      key="hmview", label_visibility="collapsed")
+
 hist = {}
 hp = os.path.join(CONFIG.paths.data_dir, "theme_history.json")
 if os.path.exists(hp):
@@ -127,13 +133,16 @@ if os.path.exists(hp):
     except Exception:  # noqa: BLE001
         hist = {}
 tm_rows = dl.treemap_data(scan.get("themes", []), top10, dl.prior_theme_scores(hist))
-clicked = c.render_treemap(tm_rows)
-# reliable selectbox filter alongside the (visual) treemap
+if hmview == "Stocks":
+    c.render_stocks_heatmap(dl.stocks_heatmap(scan.get("targets"), sector_filter))
+else:
+    c.render_treemap(tm_rows)
+# reliable selectbox filter alongside the (visual) heatmap — drives both views
 opts = ["All sectors"] + [r["label"] for r in tm_rows]
 cur = sector_filter if sector_filter in opts else "All sectors"
-sel = st.selectbox("Filter Top 10 by sector", opts,
+sel = st.selectbox("Filter by sector", opts,
                    index=opts.index(cur), key="sectsel", label_visibility="collapsed")
-new_filter = clicked or (None if sel == "All sectors" else sel)
+new_filter = None if sel == "All sectors" else sel
 if (new_filter or None) != (sector_filter or None):
     st.session_state["sector_filter"] = new_filter
     st.rerun()

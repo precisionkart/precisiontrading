@@ -100,6 +100,8 @@ def normalize_universe(df: pd.DataFrame) -> pd.DataFrame:
 
     # day's % Change (technical view; float fraction) — for the earnings bull-trap filter.
     out["change"] = get_col(df, COLUMN_CANDIDATES["change"], pct=True, expect_fraction=True)
+    # Market cap (overview view; "12.3B" -> 1.23e10 via to_num) — for the Stocks heatmap.
+    out["market_cap"] = get_col(df, COLUMN_CANDIDATES["market_cap"], numeric=True)
 
     # EPS/Sales come from the valuation view as legacy '%' strings (not fractions).
     out["eps_this_y"] = get_col(df, COLUMN_CANDIDATES["eps_this_y"], pct=True)
@@ -267,6 +269,8 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
             "growth": growth.summary(),
             "eps_this_y": row["eps_this_y"],
             "sales_past5y": row["sales_past5y"],
+            "change": row.get("change"),
+            "market_cap": row.get("market_cap"),
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
             "tier": result.tier,
