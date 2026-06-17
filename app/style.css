@@ -16,15 +16,25 @@ html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select
 .mono, .pp-num { font-family: 'Geist Mono', ui-monospace, monospace !important;
   font-variant-numeric: tabular-nums; }
 
-/* clean canvas — hide the toolbar/menu noise, but NOT the whole header: the
-   header hosts the sidebar expand control, so nuking it strands a collapsed
-   sidebar with no way to reopen it. */
+/* clean canvas */
 #MainMenu, footer, .stDeployButton, [data-testid="stToolbar"],
-[data-testid="stStatusWidget"] { display: none !important; }
-[data-testid="stHeader"] { background: transparent !important; box-shadow: none !important; }
-/* always keep the sidebar collapse/expand controls reachable */
-[data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
-[data-testid="stSidebarCollapseButton"] { display: flex !important; visibility: visible !important; }
+[data-testid="stStatusWidget"], [data-testid="stHeader"] { display: none !important; }
+
+/* SIDEBAR ALWAYS VISIBLE — Streamlit remembers a per-browser collapsed state and,
+   when collapsed, the floating expand button is clipped to the 1px rail (offsetParent
+   null) so there's no way to reopen it. Pin the sidebar open and remove the collapse
+   control entirely so it can never get stranded. */
+section[data-testid="stSidebar"],
+section[data-testid="stSidebar"][aria-expanded="false"] {
+  transform: none !important;
+  visibility: visible !important;
+  width: 300px !important;
+  min-width: 300px !important;
+  margin-left: 0 !important;
+}
+section[data-testid="stSidebar"] > div { width: 300px !important; }
+[data-testid="stSidebarCollapseButton"], [data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"] { display: none !important; }
 
 /* headings */
 .pp-h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; margin: 0; line-height: 1.1; }
