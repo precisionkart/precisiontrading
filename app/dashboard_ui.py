@@ -52,9 +52,9 @@ _CSS = """
 
 /* setups table (mockup .tbl) */
 .ppx-tbl{width:100%;border-collapse:collapse}
-.ppx-tbl thead th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600;text-align:left;padding:10px 16px;border-bottom:1px solid var(--ppx-line)}
+.ppx-tbl thead th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600;text-align:left;padding:10px 11px;border-bottom:1px solid var(--ppx-line)}
 .ppx-tbl thead th.num{text-align:right}
-.ppx-tbl tbody td{padding:12px 16px;border-bottom:1px solid var(--ppx-line);vertical-align:middle}
+.ppx-tbl tbody td{padding:12px 11px;border-bottom:1px solid var(--ppx-line);vertical-align:middle}
 .ppx-tbl tbody tr:last-child td{border-bottom:0}
 .ppx-tbl tbody tr.lead-row{background:var(--ppx-brand-soft)}
 .ppx-tbl .cell-tkr{display:flex;align-items:center;gap:11px}
@@ -68,6 +68,8 @@ _CSS = """
 .ppx-tbl .pat{font-size:13px;color:var(--ppx-text)}
 .ppx-tbl .sect{font-size:12px;color:var(--ppx-muted);font-weight:500}
 .ppx-tbl .rr{font-family:var(--ppx-mono);font-weight:700;color:var(--ppx-ink);text-align:right}
+.ppx-tbl .lvl{font-family:var(--ppx-mono);font-weight:600;font-size:13px}
+.ppx-tbl .lvl-entry{color:var(--ppx-bull)}.ppx-tbl .lvl-stop{color:var(--ppx-bear)}.ppx-tbl .lvl-tgt{color:var(--ppx-ink)}
 
 /* generic card */
 .ppx-card{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
@@ -81,7 +83,7 @@ _CSS = """
 .ppx-chip.bear{background:var(--ppx-bear-soft);color:var(--ppx-bear)}.ppx-chip.bear .dot{background:var(--ppx-bear)}
 
 /* KPI strip */
-.ppx-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:6px 0 4px}
+.ppx-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:6px 0 22px}
 .ppx-kpi{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:12px;padding:14px 15px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .ppx-kpi .lab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
 .ppx-kpi .big{font-family:var(--ppx-disp);font-size:24px;font-weight:600;color:var(--ppx-ink);margin-top:7px;display:flex;align-items:baseline;gap:7px;letter-spacing:-.01em}
@@ -338,6 +340,14 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
         rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
         rs_g, sc_g = _grade(rs), _grade(sc)
         rs_w, sc_w = _pct(rs), _pct(sc)
+        # Entry / Stop / Target — Target computed like the focus card.
+        e_, s_ = r.get("Entry"), r.get("Stop")
+        e_txt, s_txt = _money(e_), _money(s_)
+        if (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float)) and s_ == s_
+                and isinstance(rr_, (int, float)) and rr_ == rr_):
+            t_txt = _money(e_ + rr_ * (e_ - s_))
+        else:
+            t_txt = "—"
         # short pattern as the small sub-label under ticker
         pat_short = pat.split("·")[0].strip()
         if len(pat_short) > 16:
@@ -353,6 +363,9 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
             f"<td class='td-num'><div class='gnum {sc_g}'>{sc_txt}"
             f"<span class='ppx-meter sm'><span style='width:{sc_w:.0f}%'></span></span></div></td>"
             f"<td class='pat'>{_html.escape(pat)}</td>"
+            f"<td class='td-num'><span class='lvl lvl-entry'>{e_txt}</span></td>"
+            f"<td class='td-num'><span class='lvl lvl-stop'>{s_txt}</span></td>"
+            f"<td class='td-num'><span class='lvl lvl-tgt'>{t_txt}</span></td>"
             f"<td class='td-num'><span class='rr'>{rr_txt}</span></td>"
             f"<td class='sect'>{_html.escape(sect)}</td>"
             "</tr>")
@@ -362,7 +375,8 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
         f"<span class='s'>{_html.escape(sub)}</span></div>"
         "<table class='ppx-tbl'><thead><tr>"
         "<th>Ticker</th><th class='num'>RS</th><th class='num'>Score</th>"
-        "<th>Pattern</th><th class='num'>R : R</th><th>Sector</th>"
+        "<th>Pattern</th><th class='num'>Entry</th><th class='num'>Stop</th>"
+        "<th class='num'>Target</th><th class='num'>R : R</th><th>Sector</th>"
         f"</tr></thead><tbody>{''.join(body)}</tbody></table></div>",
         unsafe_allow_html=True)
 
