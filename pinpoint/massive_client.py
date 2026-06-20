@@ -277,6 +277,44 @@ class MassiveClient:
                     logger.debug("aggs worker failed: %s", exc)
         return out
 
+    # -- recent IPOs --------------------------------------------------------
+    def get_recent_ipos(self, within_days: int = 365) -> list[dict]:
+        """GET /vX/reference/ipos — IPOs that listed within `within_days`.
+
+        Returns [{ticker, listing_date, issuer_name}] for already-listed names
+        (ipo_status != 'pending'), excluding SPAC units/rights/warrants (tickers
+        with a non-alpha character or a trailing 'U'/'W'/'R' unit suffix). Newest
+        first. Empty list on failure."""
+        since = (date.today() - timedelta(days=within_days)).isoformat()
+        url = (f"{BASE_URL}/vX/reference/ipos?listing_date.gte={since}"
+               f"&order=desc&sort=listing_date&limit=1000")
+        out: list[dict] = []
+        pages = 0
+        while url and pages < 10:
+            j = self._get(url, label=f"ipos p{pages}")
+            if not j:
+                break
+            for r in j.get("results", []) or []:
+                tk = str(r.get("ticker", "")).strip().upper()
+                if not tk or not tk.isalpha():
+                    continue
+                if str(r.get("ipo_status", "")).lower() == "pending":
+                    continue
+                # crude unit/right/warrant filter (SPAC plumbing, not tradable IPOs)
+                if len(tk) == 5 and tk[-1] in ("U", "W", "R"):
+                    continue
+                out.append({"ticker": tk, "listing_date": r.get("listing_date"),
+                            "issuer_name": r.get("issuer_name")})
+            nxt = j.get("next_url")
+            url = nxt if nxt else None
+            pages += 1
+        # de-dupe keeping the newest listing per ticker
+        seen, deduped = set(), []
+        for r in out:
+            if r["ticker"] not in seen:
+                seen.add(r["ticker"]); deduped.append(r)
+        return deduped
+
     # -- compatibility shim: Finviz-quote-shaped fundament ------------------
     def fetch_quote_fundament(self, ticker: str) -> dict[str, Any]:
         """Return a Finviz-quote-shaped fundament dict for `ticker`, computed

@@ -191,3 +191,70 @@ def housekeeping(today: Optional[date] = None) -> None:
     """Run the per-scan maintenance (expire + prune)."""
     mark_expired(today)
     prune_old(today)
+
+
+# ---------------------------------------------------------------------------
+# Forward earnings dates (supplementary, yfinance — Massive has none).
+# ---------------------------------------------------------------------------
+_FWD_CACHE: dict[str, tuple] = {}        # ticker -> (as_of_date, iso_date_or_None)
+
+
+def _next_future(dates, today: date) -> Optional[str]:
+    """Pick the earliest date >= today from a heterogeneous list; ISO str or None."""
+    best: Optional[date] = None
+    for d in (dates or []):
+        pd_ = _parse(d)
+        if pd_ is None and hasattr(d, "date"):       # pandas Timestamp / datetime
+            try:
+                pd_ = d.date()
+            except Exception:  # noqa: BLE001
+                pd_ = None
+        if pd_ and pd_ >= today and (best is None or pd_ < best):
+            best = pd_
+    return best.isoformat() if best else None
+
+
+def _forward_date_one(ticker: str, today: date) -> Optional[str]:
+    """Forward earnings date for one ticker via yfinance.Ticker(t).calendar.
+
+    Handles both the modern dict shape ({'Earnings Date': [date, ...]}) and the
+    legacy DataFrame shape. Best-effort and cached per-day; never raises."""
+    tk = ticker.upper()
+    cached = _FWD_CACHE.get(tk)
+    if cached and cached[0] == today:
+        return cached[1]
+    iso = None
+    try:
+        import yfinance as yf
+        cal = yf.Ticker(tk).calendar
+        dates = None
+        if isinstance(cal, dict):
+            dates = cal.get("Earnings Date") or cal.get("earningsDate")
+        elif cal is not None and hasattr(cal, "loc"):       # DataFrame
+            try:
+                dates = list(cal.loc["Earnings Date"].values)
+            except Exception:  # noqa: BLE001
+                dates = None
+        if dates is not None and not isinstance(dates, (list, tuple)):
+            dates = [dates]
+        iso = _next_future(dates, today)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("forward earnings fetch failed for %s: %s", tk, exc)
+    _FWD_CACHE[tk] = (today, iso)
+    return iso
+
+
+def forward_earnings_dates(tickers: list[str],
+                           today: Optional[date] = None) -> dict[str, str]:
+    """Map {ticker: next_earnings_date ISO} for the given tickers (watchlist /
+    Earnings Watch page only — keep the call count small). Massive remains the
+    primary source for everything else; this is a supplementary forward-date
+    lookup since Polygon/Massive has no earnings calendar. Names with no known
+    upcoming date are omitted."""
+    today = today or date.today()
+    out: dict[str, str] = {}
+    for tk in {str(t).upper().strip() for t in tickers if str(t).strip()}:
+        iso = _forward_date_one(tk, today)
+        if iso:
+            out[tk] = iso
+    return out

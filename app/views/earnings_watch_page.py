@@ -49,6 +49,13 @@ def _window(gd):
     return f"expired ({n}d)"
 
 
+# Forward earnings dates (supplementary yfinance lookup for these tracked names
+# only — Massive has no earnings calendar). Cached per-day; best-effort.
+try:
+    _fwd = ew.forward_earnings_dates([e["ticker"] for e in store], today)
+except Exception:  # noqa: BLE001
+    _fwd = {}
+
 rows = []
 for e in sorted(store, key=lambda x: x.get("gap_date", ""), reverse=True):
     status = e.get("status", "active")
@@ -58,6 +65,7 @@ for e in sorted(store, key=lambda x: x.get("gap_date", ""), reverse=True):
         "Ticker": e["ticker"], "Gap %": e.get("gap_pct"),
         "Gap date": str(e.get("gap_date", ""))[:10],
         "Days": _days(e.get("gap_date")), "Status": label,
+        "Next earnings": _fwd.get(e["ticker"], "—"),
         "EMA zone": e.get("ema_zone") or "—", "Sector": e.get("sector") or "—",
         "In window": "★" if e["ticker"] in active else "",
     })

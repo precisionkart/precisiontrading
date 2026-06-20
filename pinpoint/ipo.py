@@ -144,27 +144,41 @@ def build_ipo_watchlist(client, limit: int = 40, ohlcv_provider=None) -> IpoResu
         def ohlcv_provider(t):
             return ohlcv_mod.fetch_daily(t, period="2y").df
 
-    # The IPO-date screener was Finviz-only; Massive has no equivalent, and
-    # walking every ticker's list_date is too costly per scan. When the client
-    # can't screen by IPO date we degrade gracefully (no IPO list / ipo_edge),
-    # which the rest of the pipeline tolerates (the layer simply doesn't fire).
-    if not hasattr(client, "fetch_universe"):
+    warnings: list[str] = []
+    # Recent IPOs come from Massive's IPO calendar (/vX/reference/ipos). Each
+    # name's sector is resolved from ticker details (SIC->sector). Legacy clients
+    # that can't supply IPOs degrade gracefully (no list / ipo_edge layer off).
+    if hasattr(client, "get_recent_ipos"):
+        recent = client.get_recent_ipos(within_days=365)
+        if not recent:
+            return IpoResult(watchlist=pd.DataFrame(),
+                             warnings=["no recent IPOs returned by Massive calendar"])
+        recent = recent[:limit]
+        tickers = [r["ticker"] for r in recent]
+        sectors = []
+        for r in recent:
+            sec = None
+            if hasattr(client, "get_ticker_details"):
+                try:
+                    sec = client.get_ticker_details(r["ticker"]).get("sector") or None
+                except Exception:  # noqa: BLE001
+                    sec = None
+            sectors.append(sec)
+    elif hasattr(client, "fetch_universe"):
+        screen = {"IPO Date": CONFIG.ipo.max_age_label, "Price": "Over $10",
+                  "Average Volume": "Over 300K"}
+        res = client.fetch_universe(screen, views=("overview",))
+        warnings = list(res.warnings)
+        if res.empty:
+            return IpoResult(watchlist=pd.DataFrame(), warnings=warnings + ["no recent IPOs returned"])
+        from .finviz_client import pick_column
+        tcol = pick_column(res.df, ["Ticker", "Symbol"])
+        scol = pick_column(res.df, ["Sector"])
+        tickers = res.df[tcol].tolist()[:limit] if tcol else []
+        sectors = res.df[scol].tolist()[:limit] if scol else [None] * len(tickers)
+    else:
         return IpoResult(watchlist=pd.DataFrame(),
-                         warnings=["IPO list unavailable on Massive "
-                                   "(no IPO-date screener); ipo_edge layer off"])
-
-    screen = {"IPO Date": CONFIG.ipo.max_age_label, "Price": "Over $10",
-              "Average Volume": "Over 300K"}
-    res = client.fetch_universe(screen, views=("overview",))
-    warnings = list(res.warnings)
-    if res.empty:
-        return IpoResult(watchlist=pd.DataFrame(), warnings=warnings + ["no recent IPOs returned"])
-
-    from .finviz_client import pick_column
-    tcol = pick_column(res.df, ["Ticker", "Symbol"])
-    scol = pick_column(res.df, ["Sector"])
-    tickers = res.df[tcol].tolist()[:limit] if tcol else []
-    sectors = res.df[scol].tolist()[:limit] if scol else [None] * len(tickers)
+                         warnings=["IPO list unavailable (client has no IPO source)"])
 
     store = load_store()
     statuses: list[IpoStatus] = []
