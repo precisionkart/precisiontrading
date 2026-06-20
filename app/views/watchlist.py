@@ -162,21 +162,21 @@ for i, r in enumerate(rows):
         open_tks = {t["ticker"] for t in wl.load_trades()
                     if str(t.get("status")) in ("open", "open_aged")}
         if tk in open_tks:
-            st.caption(f"📝 open paper-trade already logged for {tk}")
-        elif st.button(f"📝 Mark {tk} as would-have-traded", key=f"mark_{tk}"):
+            st.caption(f"📝 {tk} already in the trade log")
+        elif st.button(f"📝 Log {tk} trade", key=f"mark_{tk}"):
             sh, _dr = c.shares_for(pr.entry, pr.stop)
             wl.mark_paper_trade(tk, pr.entry, pr.stop, pr.target, pr.reward_risk, sh)
-            st.toast(f"Marked {tk} as would-have-traded")
+            st.toast(f"Logged {tk} trade")
             st.rerun()
 
 # ---- PAPER TRADES ----
-st.markdown("<div class='pp-section'>📝 Paper trades</div>", unsafe_allow_html=True)
+st.markdown("<div class='pp-section'>📝 Trade log</div>", unsafe_allow_html=True)
 # resolve open trades against cached OHLCV (idempotent), then show
 wl.resolve_trades(lambda t: ohlcv_mod.fetch_daily(t, cache_only=True).df)
 trades = sorted(wl.load_trades(), key=lambda t: t.get("marked_date", ""), reverse=True)
 if not trades:
-    st.markdown("<div class='pp-empty'>No paper trades yet. Mark an ACTIVE setup above "
-                "as 'would have traded' to start your track record.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pp-empty'>No trades logged yet. Log an ACTIVE setup above "
+                "to start your track record.</div>", unsafe_allow_html=True)
 else:
     s = wl.paper_stats(trades)
     wr = f"{s['win_rate']:.1f}%" if s["win_rate"] is not None else "—"

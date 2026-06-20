@@ -835,18 +835,24 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
                     f"{t_txt} · {rr_txt2}{sh_txt}")
     else:
         plan_txt = "—"
-    plan_html = f"<span class='plan'>{plan_txt}</span>"
+    rs = row.get("RS")
+    rs_txt = f"{rs:.0f}" if isinstance(rs, (int, float)) and rs == rs else "—"
+    sc_cls = "g" if (isinstance(score, (int, float)) and score == score and 65 <= score < 80) else ""
+    ex_html = ""
+    if isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_:
+        ex_html = (f"<span class='ex'>E <b class='e'>${e:,.2f}</b>"
+                   f" &nbsp;X <b class='x'>${s_:,.2f}</b></span>")
     return (f"<div class='{row_cls}' id='pp-card-{tk}'>"
+            f"<div class='pp-l1'>"
             f"<span class='tk'>{tk}</span>"
             f"<span class='px'>{px} {chg_html}</span>"
             f"<span class='spark'>{spark}</span>"
-            f"{rs_chip_html(row.get('RS'))}"
-            f"<span class='score {s_cls}'>{score_txt}</span>"
-            f"{plan_html}"
-            f"<span class='pat'>{pat}</span>"
-            f"<span class='sect'>{sect}</span>"
-            f"{_EF_BADGE if ef else ''}"
-            f"<span class='src {src_cls}'>{_html.escape(src)}</span>"
+            f"<span class='pp-rs2'><i>RS</i><b>{rs_txt}</b></span>"
+            f"<span class='pp-score2 {sc_cls}'><i>Score</i><b>{score_txt}</b></span>"
+            f"{_EF_BADGE if ef else ''}</div>"
+            f"<div class='pp-l2'>"
+            f"<span class='pat'>{pat}{(' · ' + sect) if sect else ''}</span>"
+            f"{ex_html}</div>"
             f"</div>")
 
 
@@ -866,21 +872,29 @@ def compact_card(row: dict, detail_fn, key: str, ef: bool = False, tier: int = N
     price = float(closes[-1]) if closes else float("nan")
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
-    c1, cstar, c2 = st.columns([22, 1, 1], vertical_alignment="center")
-    c1.markdown(_row_html(row, spark, price, chg, ef=ef, tier=tier), unsafe_allow_html=True)
-    with cstar:
-        star_button(tk, key=f"row_{key}")
-    if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
-        (open_set.discard if is_open else open_set.add)(tk)
-        st.rerun()
-    # "Trade This" — only for Tier 1/2 cards with a real enriched setup.
+    st.markdown(_row_html(row, spark, price, chg, ef=ef, tier=tier), unsafe_allow_html=True)
+    # Footer row (line 3): T · R:R  on the left, Trade This + ★ + ∨ compact on the right.
     entry, stop = _num_or_none(row.get("Entry")), _num_or_none(row.get("Stop"))
-    if tier in (1, 2) and entry and stop:
-        bkey = f"trade{tier}_{key}"          # key prefix drives the green/amber CSS
-        if st.button("📋 Trade This", key=bkey, use_container_width=True,
-                     type="primary" if tier == 1 else "secondary"):
-            st.session_state["active_trade"] = _build_active_trade(row, price)
-            st.switch_page("views/position_sizer.py")
+    rr_ = row.get("R:R")
+    tr_html = "&nbsp;"
+    if entry and stop and isinstance(rr_, (int, float)) and rr_ == rr_ and (entry - stop) > 0:
+        tgt = entry + rr_ * (entry - stop)
+        tr_html = (f"<span class='pp-tr'>T <b class='t'>${tgt:,.2f}</b> · "
+                   f"<b class='rr'>{rr_:.1f}:1</b></span>")
+    f0, f1, f2, f3 = st.columns([6, 2, 0.7, 0.7], vertical_alignment="center")
+    f0.markdown(f"<div class='pp-foot'>{tr_html}</div>", unsafe_allow_html=True)
+    with f1:
+        if tier in (1, 2) and entry and stop:
+            if st.button("📋 Trade", key=f"trade{tier}_{key}", use_container_width=True,
+                         type="primary" if tier == 1 else "secondary"):
+                st.session_state["active_trade"] = _build_active_trade(row, price)
+                st.switch_page("views/position_sizer.py")
+    with f2:
+        star_button(tk, key=f"row_{key}")
+    with f3:
+        if st.button("∨" if not is_open else "∧", key=f"exp_{key}", help="Layers"):
+            (open_set.discard if is_open else open_set.add)(tk)
+            st.rerun()
     if is_open:
         pr = detail_fn(tk)
         if pr is not None:
@@ -953,75 +967,148 @@ def _position_live(p: dict) -> dict:
     (no live calls — keeps the dashboard fast). Adds R multiple + status flags."""
     out = dict(p)
     df = ohlcv_mod.fetch_daily(str(p.get("ticker", "")).upper(), cache_only=True).df
-    cp = ema10 = ema20 = None
+    cp = ema10 = ema20 = prev_close = None
     if df is not None and len(df):
         d = ohlcv_mod.add_moving_averages(df)
         last = d.iloc[-1]
         cp = float(last["Close"])
         ema10 = float(last.get("EMA10", float("nan")))
         ema20 = float(last.get("EMA20", float("nan")))
+        if len(d) >= 2:
+            prev_close = float(d["Close"].iloc[-2])
     entry, stop = p.get("entry"), p.get("stop")
     r_mult = None
     if cp is not None and entry and stop and (entry - stop) > 0:
         r_mult = (cp - entry) / (entry - stop)
-    out.update({"price": cp, "ema10": ema10, "ema20": ema20, "r_mult": r_mult})
+    out.update({"price": cp, "ema10": ema10, "ema20": ema20, "r_mult": r_mult,
+                "prev_close": prev_close})
     return out
 
 
+def _money(x):
+    return f"${float(x):,.2f}" if isinstance(x, (int, float)) and x == x else "—"
+
+
+def _close_position_form(tk: str, current_price=None) -> None:
+    """Inline close-out form for one position (Stopped out / Target hit / Manual)."""
+    st.markdown(f"<div class='pp-sub'>Close <b>{_html.escape(tk)}</b> — exit reason:</div>",
+                unsafe_allow_html=True)
+    px = st.number_input("Exit price", min_value=0.0, step=0.01, format="%.2f",
+                         value=float(current_price or 0.0), key=f"closepx_{tk}")
+    b1, b2, b3, b4 = st.columns(4)
+    reason = None
+    if b1.button("Stopped out", key=f"cs_{tk}", use_container_width=True):
+        reason = "STOP"
+    if b2.button("Target hit", key=f"ct_{tk}", use_container_width=True):
+        reason = "TARGET"
+    if b3.button("Manual exit", key=f"cm_{tk}", use_container_width=True):
+        reason = "MANUAL"
+    if b4.button("Cancel", key=f"cc_{tk}", use_container_width=True):
+        st.session_state.pop("close_pos", None)
+        st.rerun()
+    if reason:
+        store.close_position(tk, reason, exit_price=px or None)
+        st.session_state.pop("close_pos", None)
+        st.session_state["_pos_toast"] = f"Closed {tk} ({reason})"
+        st.rerun()
+
+
+def _add_position_form() -> None:
+    """Inline add-position form (manual add, no Trade Ticket needed)."""
+    with st.form("add_pos_form", clear_on_submit=True):
+        c1, c2, c3, c4, c5 = st.columns(5)
+        tk = c1.text_input("Ticker", key="ap_tk").strip().upper()
+        entry = c2.number_input("Entry", min_value=0.0, step=0.01, format="%.2f", key="ap_e")
+        stop = c3.number_input("Stop", min_value=0.0, step=0.01, format="%.2f", key="ap_s")
+        shares = c4.number_input("Shares", min_value=0, step=1, key="ap_sh")
+        setup = c5.text_input("Setup", key="ap_setup")
+        a1, a2 = st.columns([1, 5])
+        if a1.form_submit_button("Add", type="primary") and tk and entry and stop:
+            risk = entry - stop
+            store.add_position({
+                "ticker": tk, "entry": round(float(entry), 2), "stop": round(float(stop), 2),
+                "shares": int(shares), "trail_mode": "EMA10", "setup": setup or "manual",
+                "target_3r": round(entry + 3 * risk, 2) if risk > 0 else None,
+                "target_5r": round(entry + 5 * risk, 2) if risk > 0 else None,
+                "entry_date": __import__("datetime").date.today().isoformat(), "status": "OPEN"})
+            st.session_state["add_pos_open"] = False
+            st.session_state["_pos_toast"] = f"Added {tk}"
+            st.rerun()
+        if a2.form_submit_button("Cancel"):
+            st.session_state["add_pos_open"] = False
+            st.rerun()
+
+
 def open_positions_panel() -> None:
-    """Dashboard OPEN POSITIONS widget (Change 5). Hidden when there are none."""
+    """Dashboard OPEN POSITIONS widget — compact rows with ✕ close + add form."""
+    toast = st.session_state.pop("_pos_toast", None)
+    if toast:
+        st.toast(toast, icon="✅")
     positions = store.open_positions()
-    if not positions:
-        return
     lives = [_position_live(p) for p in positions]
     st.markdown(f"<div class='pp-section'>📊 Open positions ({len(lives)})</div>",
                 unsafe_allow_html=True)
 
     # alert banners
-    alerts = []
     for lv in lives:
-        tk = lv.get("ticker"); cp = lv.get("price"); ema10 = lv.get("ema10")
-        stop = lv.get("stop"); r = lv.get("r_mult")
-        if cp is not None and ema10 is not None and ema10 == ema10 and cp < ema10:
-            alerts.append(f"⚠️ {tk} below 10 EMA — review exit")
+        tk, cp, ema10, stop, r = (lv.get("ticker"), lv.get("price"), lv.get("ema10"),
+                                  lv.get("stop"), lv.get("r_mult"))
         if cp is not None and stop and stop > 0 and cp <= stop * 1.02:
-            alerts.append(f"🔴 {tk} near stop — monitor closely")
-        if r is not None and r >= 3.0:
-            alerts.append(f"🚀 {tk} at {r:.1f}R — consider trimming 20%")
-    for a in alerts:
-        cls = "pp-pos-alert red" if a.startswith("🔴") else "pp-pos-alert"
-        st.markdown(f"<div class='{cls}'>{_html.escape(a)}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='pp-pos-alert red'>🔴 {_html.escape(str(tk))} near stop"
+                        f" — monitor closely</div>", unsafe_allow_html=True)
+        elif cp is not None and ema10 == ema10 and ema10 is not None and cp < ema10:
+            st.markdown(f"<div class='pp-pos-alert'>⚠️ {_html.escape(str(tk))} below 10 EMA"
+                        f" — review exit</div>", unsafe_allow_html=True)
+        elif r is not None and r >= 3.0:
+            st.markdown(f"<div class='pp-pos-alert'>🚀 {_html.escape(str(tk))} at {r:.1f}R"
+                        f" — consider trimming 20%</div>", unsafe_allow_html=True)
 
-    def _money(x):
-        return f"${float(x):,.2f}" if isinstance(x, (int, float)) and x == x else "—"
-
-    rows = []
-    for lv in lives:
-        tk = _html.escape(str(lv.get("ticker", "")))
+    for i, lv in enumerate(lives):
+        tk = str(lv.get("ticker", ""))
         cp, ema10, stop, entry = lv.get("price"), lv.get("ema10"), lv.get("stop"), lv.get("entry")
         r = lv.get("r_mult")
+        chg = ((cp / lv.get("prev_close") - 1) * 100) if (cp and lv.get("prev_close")) else None
         if r is None:
-            badge, rcls = "—", "blue"
-        elif r >= 3:
-            badge, rcls = f"+{r:.1f}R ✅", "green"
+            rtxt, rcls, dot = "—", "blue", "blue"
         elif r >= 1:
-            badge, rcls = f"+{r:.1f}R 🟡", "amber"
+            rtxt, rcls, dot = f"+{r:.1f}R", "green", "green"
         elif r >= 0:
-            badge, rcls = f"+{r:.1f}R", "blue"
+            rtxt, rcls, dot = f"+{r:.1f}R", "amber", "amber"
         else:
-            badge, rcls = f"{r:.1f}R ❌", "red"
-        below = (cp is not None and ema10 is not None and ema10 == ema10 and cp < ema10)
-        hold = "BELOW 10 EMA" if below else "HOLDING"
-        rows.append(
+            rtxt, rcls, dot = f"{r:.1f}R", "red", "red"
+        below = (cp is not None and ema10 == ema10 and ema10 is not None and cp < ema10)
+        status = ("EXIT" if (cp and stop and cp <= stop * 1.02) else
+                  "TRIM" if (r is not None and r >= 3) else
+                  "EXIT" if below else "HOLDING")
+        dollar = ((cp - entry) * (lv.get("shares") or 0)) if (cp and entry) else None
+        dol_txt = (f"{'+' if dollar >= 0 else '-'}${abs(dollar):,.0f}"
+                   if isinstance(dollar, (int, float)) else "")
+        chg_html = (f"<span class='chg {'up' if chg >= 0 else 'down'}'>"
+                    f"{'▲' if chg >= 0 else '▼'}{abs(chg):.1f}%</span>" if chg is not None else "")
+        rowcol, xcol = st.columns([15, 1], vertical_alignment="center")
+        rowcol.markdown(
             f"<div class='pp-pos'>"
-            f"<span class='tk'>{tk}</span>"
-            f"<span class='m'>Entry {_money(entry)}</span>"
-            f"<span class='m'>Cur {_money(cp)}</span>"
-            f"<span class='r {rcls}'>{badge}</span>"
-            f"<span class='m'>Stop {_money(stop)}</span>"
-            f"<span class='m'>10 EMA {_money(ema10)}</span>"
-            f"<span class='hold'>{hold}</span></div>")
-    st.markdown("<div class='pp-pos-wrap'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
+            f"<span class='pp-pos-dot {dot}'></span>"
+            f"<span class='tk'>{_html.escape(tk)}</span>"
+            f"<span class='m'>{_money(cp)} {chg_html}</span>"
+            f"<span class='r {rcls}'>{rtxt}</span>"
+            f"<span class='dol m'>{dol_txt}</span>"
+            f"<span class='st'>{status}</span>"
+            f"<span class='m e2'>Entry {_money(entry)} · Stop {_money(stop)}</span>"
+            f"</div>", unsafe_allow_html=True)
+        if xcol.button("✕", key=f"closebtn_{i}_{tk}", help=f"Close {tk}"):
+            st.session_state["close_pos"] = tk
+            st.rerun()
+        if st.session_state.get("close_pos") == tk:
+            _close_position_form(tk, current_price=cp)
+
+    # + Add position
+    if st.session_state.get("add_pos_open"):
+        _add_position_form()
+    else:
+        if st.button("＋ Add position", key="add_pos_btn"):
+            st.session_state["add_pos_open"] = True
+            st.rerun()
 
 
 def render_detail_inline(pr) -> None:

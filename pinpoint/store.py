@@ -155,6 +155,36 @@ def add_position(entry: dict) -> list[dict]:
     return positions
 
 
+def close_position(ticker: str, exit_reason: str, exit_price=None,
+                   exit_date=None) -> list[dict]:
+    """Mark the open position for `ticker` CLOSED with exit metadata (monitor.py
+    ignores closed/resolved rows; the extra fields don't affect its reads)."""
+    import datetime
+    positions = load_positions()
+    tk = str(ticker).upper()
+    for p in positions:
+        if (str(p.get("ticker", "")).upper() == tk
+                and str(p.get("status", "open")).lower() not in ("closed", "resolved")):
+            p["status"] = "CLOSED"
+            p["exit_reason"] = exit_reason
+            p["exit_date"] = exit_date or datetime.date.today().isoformat()
+            if exit_price is not None:
+                p["exit_price"] = round(float(exit_price), 2)
+                entry, stop = p.get("entry"), p.get("stop")
+                if entry and stop and (entry - stop) > 0:
+                    p["r_multiple"] = round((float(exit_price) - entry) / (entry - stop), 3)
+    path = _positions_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(positions, f, indent=2)
+        os.replace(tmp, path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("positions write failed: %s", exc)
+    return positions
+
+
 def add_to_watchlist(ticker: str) -> list[str]:
     from . import watchlist as wl_mod
     return wl_mod.add(ticker)

@@ -412,3 +412,61 @@ div[class*="st-key-trade2_"] button { background:#F59E0B!important; border-color
 /* Header divider */
 .pp-header { border-bottom:1px solid #E8ECEF; padding-bottom:10px; }
 .pp-h1 { font-size:28px; font-weight:600; color:#131722; }
+
+/* ============================================================
+   UI REFINEMENTS — compact cards, labeled badges, positions
+   ============================================================ */
+/* 3-line compact setup card */
+.pp-row { flex-direction:column !important; align-items:stretch !important; gap:6px !important;
+  padding:12px 16px !important; margin-bottom:2px !important; }
+.pp-l1 { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.pp-l1 .tk { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:16px; color:#131722; }
+.pp-l1 .px { font-family:'IBM Plex Mono',monospace; font-size:14px; color:#131722; }
+.pp-l1 .px .chg.up { color:#26A69A; } .pp-l1 .px .chg.down { color:#EF5350; }
+.pp-l1 .spark { width:64px; display:flex; align-items:center; }
+.pp-l2 { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.pp-l2 .pat { font-size:13px; color:#6B7280; }
+.pp-l2 .ex { font-family:'IBM Plex Mono',monospace; font-size:13px; color:#131722; margin-left:auto; }
+.pp-l2 .ex b.e { color:#2962FF; } .pp-l2 .ex b.x { color:#EF5350; }
+
+/* Labeled RS / Score badges */
+.pp-rs2, .pp-score2 { display:inline-flex; align-items:baseline; gap:4px; padding:2px 8px;
+  border-radius:4px; font-family:'IBM Plex Mono',monospace; }
+.pp-rs2 i, .pp-score2 i { font-size:9px; font-style:normal; font-weight:600; text-transform:uppercase; opacity:.8; }
+.pp-rs2 b, .pp-score2 b { font-size:13px; font-weight:700; }
+.pp-rs2 { background:#F3F0FF; color:#7C3AED; }
+.pp-score2 { background:#EFF6FF; color:#2962FF; }
+.pp-score2.g { background:#FEF3C7; color:#D97706; }
+
+/* Footer line (T · R:R) */
+.pp-foot { font-family:'IBM Plex Mono',monospace; font-size:13px; color:#131722; padding-top:2px; }
+.pp-tr b.t { color:#26A69A; } .pp-tr b.rr { color:#131722; font-weight:700; }
+
+/* Compact Trade button (Fix 1) */
+div[class*="st-key-trade1_"] button, div[class*="st-key-trade2_"] button {
+  height:32px !important; min-height:32px !important; font-size:12px !important;
+  padding:6px 16px !important; width:auto !important; border-radius:6px !important; }
+div[class*="st-key-trade2_"] button { background:#F59E0B !important; border-color:#F59E0B !important; color:#111 !important; }
+/* compact star + chevron */
+div[class*="st-key-exp_"] button { height:32px !important; min-height:32px !important;
+  padding:2px 8px !important; color:#9CA3AF !important; border-color:#E8ECEF !important; }
+/* tighten the gap so the footer reads as part of the card */
+.pp-row + div[data-testid="stHorizontalBlock"] { margin-top:-4px; margin-bottom:14px; }
+
+/* Open positions — 2-line compact rows */
+.pp-pos { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; padding:10px 14px;
+  background:#F8F9FA; border:1px solid #E8ECEF; border-radius:8px; margin-bottom:0; }
+.pp-pos-dot { width:8px; height:8px; border-radius:50%; }
+.pp-pos-dot.green { background:#26A69A; } .pp-pos-dot.amber { background:#F59E0B; }
+.pp-pos-dot.red { background:#EF5350; } .pp-pos-dot.blue { background:#2962FF; }
+.pp-pos .tk { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; }
+.pp-pos .m { font-family:'IBM Plex Mono',monospace; font-size:12px; color:#6B7280; }
+.pp-pos .r { font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:14px; }
+.pp-pos .r.green { color:#26A69A; } .pp-pos .r.amber { color:#F59E0B; }
+.pp-pos .r.red { color:#EF5350; } .pp-pos .r.blue { color:#2962FF; }
+.pp-pos .st { font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:#9CA3AF; }
+.pp-pos .e2 { width:100%; color:#9CA3AF; font-size:11px; }
+div[class*="st-key-closebtn_"] button { color:#9CA3AF !important; border:none !important;
+  background:transparent !important; padding:0 !important; min-height:28px !important; font-size:13px !important; }
+div[class*="st-key-add_pos_btn"] button { border:none !important; background:transparent !important;
+  color:#2962FF !important; font-size:12px !important; padding:4px 0 !important; }

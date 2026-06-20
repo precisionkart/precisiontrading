@@ -19,7 +19,7 @@ from pinpoint.config import CONFIG
 from pinpoint.backtest import BacktestEngine, BACKTEST_UNIVERSE
 
 c.page_header("Backtest")
-st.markdown("<div class='pp-sub'>Walk-forward simulation of the Pinpoint setup engine "
+st.markdown("<div class='pp-sub'>Walk-forward backtest of the Pinpoint setup engine "
             "— point-in-time scans (zero lookahead), .89 stops, 5R targets, 10-EMA "
             "close trail. Research only.</div>", unsafe_allow_html=True)
 
