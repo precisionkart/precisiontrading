@@ -96,11 +96,18 @@ if len(t2):
                        ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
 if len(t3):
     st.markdown("<div class='pp-section'>•• Watchlist (50-64)</div>", unsafe_allow_html=True)
-    pills = "".join(
-        f"<span class='pp-watch-pill'>{c._html.escape(str(r.get('Ticker')))}"
-        f"<b>{r.get('Score'):.0f}</b></span>"
-        for _, r in t3.iterrows())
-    st.markdown(f"<div class='pp-watchpills'>{pills}</div>", unsafe_allow_html=True)
+    _t3 = list(t3.iterrows())
+    per_row = 6
+    for _r0 in range(0, len(_t3), per_row):
+        chunk = _t3[_r0:_r0 + per_row]
+        cols = st.columns(per_row)
+        for _ci3, (_, r) in enumerate(chunk):
+            tkp = str(r.get("Ticker"))
+            with cols[_ci3]:
+                if st.button(f"{tkp} {r.get('Score'):.0f}", key=f"wp_{tkp}",
+                             help=f"Analyse {tkp}", use_container_width=True):
+                    st.session_state["mp_prefill"] = tkp
+                    st.switch_page("views/my_picks.py")
 c.scroll_to_card()   # smooth-scroll to a card opened from a deep-link
 
 # ---- Earnings reactions — both directions (Phase 10 step 8) ----

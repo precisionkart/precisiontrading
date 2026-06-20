@@ -19,10 +19,12 @@ ref_tag = (f"grading against universe snapshot from {ref_date}" if ref_date else
 c.page_header("My Picks <span class='dim'>Analyzer</span>", subtitle=ref_tag)
 st.write("")
 
-text = st.text_area("Tickers (comma or newline separated)",
+# Pre-fill from a Dashboard watchlist-pill click (Fix 4).
+_prefill = st.session_state.pop("mp_prefill", "")
+text = st.text_area("Tickers (comma or newline separated)", value=_prefill,
                     placeholder="AAPL, GOOGL, AGX, BAND, MEC, NVDA", height=88)
 uploaded = st.file_uploader("…or upload a CSV (first column = tickers)", type=["csv"])
-analyze = st.button("Analyze", type="primary")
+analyze = st.button("Analyze", type="primary") or bool(_prefill)
 
 
 def _parse():

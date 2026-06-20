@@ -470,3 +470,56 @@ div[class*="st-key-closebtn_"] button { color:#9CA3AF !important; border:none !i
   background:transparent !important; padding:0 !important; min-height:28px !important; font-size:13px !important; }
 div[class*="st-key-add_pos_btn"] button { border:none !important; background:transparent !important;
   color:#2962FF !important; font-size:12px !important; padding:4px 0 !important; }
+
+/* ============================================================
+   SELF-CONTAINED SETUP CARDS (st.container border + key)
+   ============================================================ */
+div[class*="st-key-setupcard_t"] { border:1px solid #E8ECEF !important; border-radius:8px !important;
+  box-shadow:0 1px 3px rgba(0,0,0,0.06) !important; padding:14px 16px !important;
+  background:#FFFFFF !important; margin-bottom:10px !important; }
+div[class*="st-key-setupcard_t1_"] { border-left:3px solid #2962FF !important; }
+div[class*="st-key-setupcard_t2_"] { border-left:3px solid #F59E0B !important; }
+div[class*="st-key-setupcard_t0_"] { border-left:3px solid #E8ECEF !important; }
+/* tighten internal vertical gaps so the card stays compact */
+div[class*="st-key-setupcard_t"] [data-testid="stVerticalBlock"] { gap:0.35rem; }
+div[class*="st-key-setupcard_t"] [data-testid="stElementContainer"] { margin:0 !important; }
+
+.pp-cardbody { display:flex; flex-direction:column; gap:5px; }
+.pp-l1 { display:flex; align-items:center; gap:10px; }
+.pp-l1 .tk { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:16px; color:#131722; }
+.pp-l1 .px { font-family:'IBM Plex Mono',monospace; font-size:14px; color:#131722; }
+.pp-l1 .px .chg.up { color:#26A69A; } .pp-l1 .px .chg.down { color:#EF5350; }
+.pp-l1 .spark { width:60px; height:28px; display:flex; align-items:center; }
+.pp-l1-r { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.pp-l2 { font-size:13px; color:#6B7280; }
+.pp-l3 { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; font-family:'IBM Plex Mono',monospace; }
+.pp-l3 .it { display:inline-flex; align-items:baseline; gap:4px; }
+.pp-l3 .it i { font-size:10px; font-style:normal; text-transform:uppercase; color:#9CA3AF; font-weight:600; }
+.pp-l3 .it b { font-size:13px; }
+.pp-l3 b.e { color:#2962FF; } .pp-l3 b.x { color:#EF5350; } .pp-l3 b.t { color:#26A69A; }
+.pp-l3 b.rr, .pp-l3 b.sh { color:#131722; }
+
+/* labeled RS / Score badges — equal height 22px */
+.pp-rs2, .pp-score2 { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px;
+  border-radius:4px; font-family:'IBM Plex Mono',monospace; }
+.pp-rs2 i, .pp-score2 i { font-size:9px; font-style:normal; font-weight:600; text-transform:uppercase; opacity:.8; }
+.pp-rs2 b, .pp-score2 b { font-size:13px; font-weight:700; }
+.pp-rs2 { background:#F3F0FF; color:#7C3AED; }
+.pp-score2 { background:#EFF6FF; color:#2962FF; }
+.pp-score2.g { background:#FEF3C7; color:#D97706; }
+
+.pp-divider { border:none; border-top:1px solid #E8ECEF; margin:8px 0 6px; }
+
+/* footer buttons inside the card */
+div[class*="st-key-trade1_"] button, div[class*="st-key-trade2_"] button {
+  height:28px !important; min-height:28px !important; font-size:12px !important;
+  padding:4px 14px !important; width:auto !important; border-radius:6px !important; }
+div[class*="st-key-trade2_"] button { background:#F59E0B !important; border-color:#F59E0B !important; color:#111 !important; }
+div[class*="st-key-exp_"] button { height:28px !important; min-height:28px !important; width:28px !important;
+  padding:0 !important; color:#9CA3AF !important; border:1px solid #E8ECEF !important; }
+
+/* watchlist pills as buttons */
+div[class*="st-key-wp_"] button { background:#F8F9FA !important; border:1px solid #E8ECEF !important;
+  border-radius:6px !important; color:#131722 !important; font-size:13px !important;
+  font-weight:600 !important; padding:6px 12px !important; min-height:30px !important; }
+div[class*="st-key-wp_"] button:hover { background:#EFF6FF !important; border-color:#2962FF !important; }

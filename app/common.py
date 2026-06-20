@@ -797,62 +797,51 @@ _EF_BADGE = "<span class='pp-ef'>📈 Earnings Flag</span>"
 
 def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: bool = False,
               tier: int = None) -> str:
+    """3-row card BODY (no border — the st.container provides the box). Row 1:
+    ticker/price/change/spark/RS/Score. Row 2: pattern · sector. Row 3: the
+    E·X·T·R:R·shares plan line (shares sized from user_settings via shares_for)."""
     tk = _html.escape(str(row.get("Ticker", "")))
     pat = _html.escape(str(row.get("Pattern") or "—"))
     sect = _html.escape(str(row.get("Sector") or ""))
-    src = str(row.get("Source") or "")
     score = row.get("Score")
-    rr = row.get("R:R")
+    rs = row.get("RS")
     px = f"${price:,.2f}" if price == price else "—"
     if chg is not None and chg == chg:
-        cls = "up" if chg >= 0 else "down"
-        arrow = "▲" if chg >= 0 else "▼"
-        chg_html = f"<span class='chg {cls}'>{arrow} {abs(chg):.1f}%</span>"
+        chg_html = (f"<span class='chg {'up' if chg >= 0 else 'down'}'>"
+                    f"{'▲' if chg >= 0 else '▼'} {abs(chg):.1f}%</span>")
     else:
         chg_html = ""
     score_txt = f"{score:.0f}" if isinstance(score, (int, float)) and score == score else "—"
-    rr_txt = f"{rr:.1f}:1" if isinstance(rr, (int, float)) and rr == rr else "—"
-    src_cls = "focus" if src == "Focus" else ""
-    # score gradient on the 0-100 scale (midpoint 50, strong at 80).
-    s_cls = ""
-    row_cls = "pp-row"
-    if isinstance(score, (int, float)) and score == score:
-        s_cls = "e" if score >= 80 else "g" if score >= 65 else "w" if score >= 50 else ""
-    if tier == 1 or (isinstance(score, (int, float)) and score == score and score >= 80):
-        row_cls = "pp-row tier1"
-    elif tier == 2 or (isinstance(score, (int, float)) and score == score and score >= 65):
-        row_cls = "pp-row tier2"
-    # full E · X · T · R:R plan row (colored), or "—" when no measured plan
-    e, s_, rr_ = row.get("Entry"), row.get("Stop"), row.get("R:R")
-    if (isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_):
-        rr_txt2 = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
-        risk = e - s_
-        t_txt = (f" · T <b class='t'>${e + rr_ * risk:,.2f}</b>"
-                 if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else "")
-        sh, _dr = shares_for(e, s_)
-        sh_txt = f" · {sh} sh" if sh > 0 else ""
-        plan_txt = (f"E <b class='e'>${e:,.2f}</b> · X <b class='x'>${s_:,.2f}</b>"
-                    f"{t_txt} · {rr_txt2}{sh_txt}")
-    else:
-        plan_txt = "—"
-    rs = row.get("RS")
     rs_txt = f"{rs:.0f}" if isinstance(rs, (int, float)) and rs == rs else "—"
     sc_cls = "g" if (isinstance(score, (int, float)) and score == score and 65 <= score < 80) else ""
-    ex_html = ""
-    if isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_:
-        ex_html = (f"<span class='ex'>E <b class='e'>${e:,.2f}</b>"
-                   f" &nbsp;X <b class='x'>${s_:,.2f}</b></span>")
-    return (f"<div class='{row_cls}' id='pp-card-{tk}'>"
+
+    # Row 3 plan: E · X · T · R:R · shares (shares from account via shares_for).
+    e, s_, rr_ = row.get("Entry"), row.get("Stop"), row.get("R:R")
+    if (isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_):
+        risk = e - s_
+        rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
+        t_html = (f"<span class='it'><i>T</i> <b class='t'>${e + rr_ * risk:,.2f}</b></span>"
+                  if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else "")
+        sh, _dr = shares_for(e, s_)
+        sh_html = f"<span class='it'><b class='sh'>{sh} sh</b></span>" if sh > 0 else ""
+        plan_html = (
+            f"<div class='pp-l3'>"
+            f"<span class='it'><i>E</i> <b class='e'>${e:,.2f}</b></span>"
+            f"<span class='it'><i>X</i> <b class='x'>${s_:,.2f}</b></span>"
+            f"{t_html}<span class='it'><b class='rr'>{rr_txt}</b></span>{sh_html}</div>")
+    else:
+        plan_html = ""
+    return (f"<div class='pp-cardbody' id='pp-card-{tk}'>"
             f"<div class='pp-l1'>"
             f"<span class='tk'>{tk}</span>"
             f"<span class='px'>{px} {chg_html}</span>"
             f"<span class='spark'>{spark}</span>"
+            f"<span class='pp-l1-r'>"
             f"<span class='pp-rs2'><i>RS</i><b>{rs_txt}</b></span>"
             f"<span class='pp-score2 {sc_cls}'><i>Score</i><b>{score_txt}</b></span>"
-            f"{_EF_BADGE if ef else ''}</div>"
-            f"<div class='pp-l2'>"
-            f"<span class='pat'>{pat}{(' · ' + sect) if sect else ''}</span>"
-            f"{ex_html}</div>"
+            f"{_EF_BADGE if ef else ''}</span></div>"
+            f"<div class='pp-l2'><span class='pat'>{pat}{(' · ' + sect) if sect else ''}</span></div>"
+            f"{plan_html}"
             f"</div>")
 
 
@@ -872,33 +861,28 @@ def compact_card(row: dict, detail_fn, key: str, ef: bool = False, tier: int = N
     price = float(closes[-1]) if closes else float("nan")
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
-    st.markdown(_row_html(row, spark, price, chg, ef=ef, tier=tier), unsafe_allow_html=True)
-    # Footer row (line 3): T · R:R  on the left, Trade This + ★ + ∨ compact on the right.
     entry, stop = _num_or_none(row.get("Entry")), _num_or_none(row.get("Stop"))
-    rr_ = row.get("R:R")
-    tr_html = "&nbsp;"
-    if entry and stop and isinstance(rr_, (int, float)) and rr_ == rr_ and (entry - stop) > 0:
-        tgt = entry + rr_ * (entry - stop)
-        tr_html = (f"<span class='pp-tr'>T <b class='t'>${tgt:,.2f}</b> · "
-                   f"<b class='rr'>{rr_:.1f}:1</b></span>")
-    f0, f1, f2, f3 = st.columns([6, 2, 0.7, 0.7], vertical_alignment="center")
-    f0.markdown(f"<div class='pp-foot'>{tr_html}</div>", unsafe_allow_html=True)
-    with f1:
-        if tier in (1, 2) and entry and stop:
-            if st.button("📋 Trade", key=f"trade{tier}_{key}", use_container_width=True,
-                         type="primary" if tier == 1 else "secondary"):
-                st.session_state["active_trade"] = _build_active_trade(row, price)
-                st.switch_page("views/position_sizer.py")
-    with f2:
-        star_button(tk, key=f"row_{key}")
-    with f3:
-        if st.button("∨" if not is_open else "∧", key=f"exp_{key}", help="Layers"):
-            (open_set.discard if is_open else open_set.add)(tk)
-            st.rerun()
-    if is_open:
-        pr = detail_fn(tk)
-        if pr is not None:
-            render_detail_inline(pr)
+    # One self-contained bordered card (content + divider + footer all inside).
+    with st.container(border=True, key=f"setupcard_t{tier or 0}_{key}"):
+        st.markdown(_row_html(row, spark, price, chg, ef=ef, tier=tier), unsafe_allow_html=True)
+        st.markdown("<hr class='pp-divider'/>", unsafe_allow_html=True)
+        f0, f1, f2 = st.columns([6, 1, 1], vertical_alignment="center")
+        with f0:
+            if tier in (1, 2) and entry and stop:
+                if st.button("📋 Trade", key=f"trade{tier}_{key}",
+                             type="primary" if tier == 1 else "secondary"):
+                    st.session_state["active_trade"] = _build_active_trade(row, price)
+                    st.switch_page("views/position_sizer.py")
+        with f1:
+            star_button(tk, key=f"row_{key}")
+        with f2:
+            if st.button("∨" if not is_open else "∧", key=f"exp_{key}", help="Layers"):
+                (open_set.discard if is_open else open_set.add)(tk)
+                st.rerun()
+        if is_open:
+            pr = detail_fn(tk)
+            if pr is not None:
+                render_detail_inline(pr)
 
 
 def _num_or_none(v):
@@ -989,27 +973,41 @@ def _money(x):
     return f"${float(x):,.2f}" if isinstance(x, (int, float)) and x == x else "—"
 
 
-def _close_position_form(tk: str, current_price=None) -> None:
-    """Inline close-out form for one position (Stopped out / Target hit / Manual)."""
-    st.markdown(f"<div class='pp-sub'>Close <b>{_html.escape(tk)}</b> — exit reason:</div>",
-                unsafe_allow_html=True)
+@st.dialog("Exit Position")
+def _exit_dialog(lv: dict) -> None:
+    """Popup to close an open position (Fix 2). Writes positions.json + best-effort
+    Telegram, then reruns."""
+    tk = str(lv.get("ticker", ""))
+    entry, stop, cp = lv.get("entry"), lv.get("stop"), lv.get("price")
+    shares = lv.get("shares") or 0
+    risk = (entry - stop) if (entry and stop) else None
+    cur_r = ((cp - entry) / risk) if (cp and risk and risk > 0) else None
+    dollar = ((cp - entry) * shares) if (cp and entry) else None
+    st.markdown(
+        f"**{_html.escape(tk)}** — Entry {_money(entry)} · Current {_money(cp)} · "
+        f"P&L {('+' if (dollar or 0) >= 0 else '-')}${abs(dollar):,.0f} "
+        f"({('+' if (cur_r or 0) >= 0 else '')}{cur_r:.1f}R)" if (dollar is not None and cur_r is not None)
+        else f"**{_html.escape(tk)}**")
     px = st.number_input("Exit price", min_value=0.0, step=0.01, format="%.2f",
-                         value=float(current_price or 0.0), key=f"closepx_{tk}")
-    b1, b2, b3, b4 = st.columns(4)
-    reason = None
-    if b1.button("Stopped out", key=f"cs_{tk}", use_container_width=True):
-        reason = "STOP"
-    if b2.button("Target hit", key=f"ct_{tk}", use_container_width=True):
-        reason = "TARGET"
-    if b3.button("Manual exit", key=f"cm_{tk}", use_container_width=True):
-        reason = "MANUAL"
-    if b4.button("Cancel", key=f"cc_{tk}", use_container_width=True):
-        st.session_state.pop("close_pos", None)
-        st.rerun()
-    if reason:
+                         value=float(cp or entry or 0.0), key=f"expx_{tk}")
+    reason_label = st.radio("Reason", ["Stop hit", "Target reached", "10 EMA break", "Manual exit"],
+                            key=f"exreason_{tk}", horizontal=True)
+    _rmap = {"Stop hit": "STOP", "Target reached": "TARGET",
+             "10 EMA break": "EMA10_TRAIL", "Manual exit": "MANUAL"}
+    c1, c2 = st.columns(2)
+    if c1.button("Confirm Exit", type="primary", use_container_width=True, key=f"exok_{tk}"):
+        reason = _rmap.get(reason_label, "MANUAL")
         store.close_position(tk, reason, exit_price=px or None)
-        st.session_state.pop("close_pos", None)
-        st.session_state["_pos_toast"] = f"Closed {tk} ({reason})"
+        rr = ((px - entry) / risk) if (risk and risk > 0) else 0.0
+        try:                                            # best-effort Telegram (never blocks)
+            from pinpoint.telegram import get_bot
+            get_bot().send(f"🔴 *{tk} CLOSED*\nExit: ${px:.2f} | "
+                           f"{'+' if rr >= 0 else ''}{rr:.1f}R\nReason: {reason_label}")
+        except Exception:  # noqa: BLE001
+            pass
+        st.session_state["_pos_toast"] = f"{tk} closed at ${px:.2f} ({'+' if rr >= 0 else ''}{rr:.1f}R)"
+        st.rerun()
+    if c2.button("← Cancel", use_container_width=True, key=f"excancel_{tk}"):
         st.rerun()
 
 
@@ -1097,10 +1095,7 @@ def open_positions_panel() -> None:
             f"<span class='m e2'>Entry {_money(entry)} · Stop {_money(stop)}</span>"
             f"</div>", unsafe_allow_html=True)
         if xcol.button("✕", key=f"closebtn_{i}_{tk}", help=f"Close {tk}"):
-            st.session_state["close_pos"] = tk
-            st.rerun()
-        if st.session_state.get("close_pos") == tk:
-            _close_position_form(tk, current_price=cp)
+            _exit_dialog(lv)
 
     # + Add position
     if st.session_state.get("add_pos_open"):

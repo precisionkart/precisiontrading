@@ -192,9 +192,9 @@ def main() -> int:
     # 1) PENDING buy-stops: promote to OPEN + alert when their entry triggers.
     _check_pending(positions)
 
-    # 2) exit monitoring runs on filled (OPEN-ish) positions only — never PENDING.
-    open_positions = [p for p in positions
-                      if str(p.get("status", "open")).lower() not in ("closed", "resolved", "pending")]
+    # 2) exit monitoring (stop / EMA / trim) fires ONLY for positions you're
+    #    actually in — status == OPEN. PENDING handled above; CLOSED skipped.
+    open_positions = [p for p in positions if str(p.get("status", "")).upper() == "OPEN"]
 
     print(f"monitor: {len(open_positions)} open position(s)")
     if not open_positions:
