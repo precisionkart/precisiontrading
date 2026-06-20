@@ -199,7 +199,14 @@ class MassiveClient:
 
     # -- 4. batch snapshots -------------------------------------------------
     def get_snapshots_batch(self, tickers: list[str]) -> dict[str, dict]:
-        """GET batch snapshot for up to 250 tickers/call, looping for more."""
+        """GET batch snapshot for up to 250 tickers/call, looping for more.
+
+        NOTE: when the market is closed the snapshot 'day' block is zero, so the
+        parsed `volume`/`price` fall back to prevDay — i.e. STALE (prior session)
+        figures. That's fine for the universe build: the relative-volume metric
+        used downstream is computed from OHLCV (enrich_with_ohlcv), not from this
+        snapshot, and the RVOL gate is relaxed off-hours (see screener /
+        config.market_is_open) so we never gate on a stale snapshot volume."""
         tickers = [str(t).upper().strip() for t in tickers if str(t).strip()]
         out: dict[str, dict] = {}
         for i in range(0, len(tickers), _SNAPSHOT_BATCH):

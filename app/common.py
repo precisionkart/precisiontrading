@@ -243,6 +243,24 @@ def page_header(title: str, subtitle: str = None, show_refresh: bool = True) -> 
         st.markdown(f"<div class='pp-sub'>{subtitle}</div>", unsafe_allow_html=True)
 
 
+def weekend_mode_active() -> bool:
+    """Is the RVOL gate currently relaxed? True when the user forced weekend mode
+    on the Settings page, or (by default) whenever the market is closed."""
+    from pinpoint.config import market_is_open
+    return bool(st.session_state.get("weekend_mode", not market_is_open()))
+
+
+def weekend_banner() -> None:
+    """Small banner under the header when the market is closed / weekend mode is
+    on, so relaxed-RVOL setups aren't mistaken for live-confirmed ones."""
+    from pinpoint.config import market_is_open
+    if market_is_open() and not st.session_state.get("weekend_mode"):
+        return
+    st.markdown(
+        "<div class='pp-weekend'>📅 Weekend scan — RVOL gate relaxed. "
+        "Setups valid at Monday open.</div>", unsafe_allow_html=True)
+
+
 def sidebar_logo() -> None:
     st.markdown("<div class='pp-logo'>Pin<span class='tick'>point</span></div>",
                 unsafe_allow_html=True)
@@ -409,7 +427,7 @@ def run_refresh(cloud: bool = None) -> None:
             status.markdown(f"<div class='pp-scan-status'>{_html.escape(text)}</div>",
                             unsafe_allow_html=True)
 
-        new = full_scan(progress_cb=_cb)
+        new = full_scan(ignore_rvol=weekend_mode_active(), progress_cb=_cb)
         progress.empty()
         status.empty()
     st.session_state["scan"] = new

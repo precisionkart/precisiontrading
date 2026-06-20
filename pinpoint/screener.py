@@ -206,17 +206,35 @@ def enrich_with_fundamentals(df: pd.DataFrame, client) -> pd.DataFrame:
 def apply_universe_gates(df: pd.DataFrame, min_price: float = 10.0,
                          min_avg_volume: int = 300_000,
                          max_pct_below_high: float = 10.0,
-                         require_above_sma200: bool = True) -> pd.DataFrame:
+                         require_above_sma200: bool = True,
+                         min_rel_volume: float = 2.0,
+                         relax_rvol=None) -> pd.DataFrame:
     """Apply the §3.3 hard universe gates and sort by quarter performance desc
-    (the old Finviz 'Performance (Quarter)' sort)."""
+    (the old Finviz 'Performance (Quarter)' sort).
+
+    The relative-volume gate is conditional: enforced during the live session,
+    relaxed on weekends / after-hours (when a snapshot's RVOL is naturally low and
+    would gate out every name). `relax_rvol=None` auto-detects via market_is_open;
+    pass True/False to force. Price / avg-volume / pct-below-high / SMA200 gates
+    are ALWAYS active. Sets df.attrs['rvol_relaxed'] for the UI banner."""
+    from .config import market_is_open
     if df is None or len(df) == 0:
         return _empty_universe()
+    if relax_rvol is None:
+        relax_rvol = not market_is_open()
     out = df.copy()
     mask = (out["price"] > min_price) & (out["avg_volume"] >= min_avg_volume)
     mask &= out["pct_below_high"] <= max_pct_below_high
     if require_above_sma200:
         mask &= out["sma200_pct"] > 0
+    if not relax_rvol and "rel_volume" in out.columns:
+        # rel_volume comes from OHLCV (enrich_with_ohlcv), NOT the stale snapshot.
+        mask &= out["rel_volume"] >= min_rel_volume
+    else:
+        logger.info("RVOL gate relaxed (market closed / weekend scan)")
     out = out[mask.fillna(False)]
     if "perf_quarter" in out.columns:
         out = out.sort_values("perf_quarter", ascending=False, na_position="last")
-    return out.reset_index(drop=True)
+    out = out.reset_index(drop=True)
+    out.attrs["rvol_relaxed"] = bool(relax_rvol)
+    return out

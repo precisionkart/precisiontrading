@@ -36,6 +36,23 @@ st.markdown(f"<div class='pp-sub'>At <b>{risk:.2f}%</b> risk on a "
             f"<b>${acct:,.0f}</b> account you risk <b>${acct*risk/100:,.0f}</b> per trade.</div>",
             unsafe_allow_html=True)
 
+# ---- Weekend / offline scan mode ----
+st.markdown("<div class='pp-section'>Scan mode</div>", unsafe_allow_html=True)
+from pinpoint.config import market_is_open  # noqa: E402
+_mkt_open = market_is_open()
+weekend_mode = st.checkbox(
+    "Weekend scan mode (relax RVOL gate)",
+    value=st.session_state.get("weekend_mode", not _mkt_open),
+    key="weekend_mode",
+    help="Drops the relative-volume gate so setups appear when the market is "
+         "closed (RVOL is naturally low off-hours). Other gates stay active.")
+st.markdown(
+    f"<div class='pp-sub'>Market is currently "
+    f"<b>{'OPEN' if _mkt_open else 'CLOSED'}</b>. "
+    f"RVOL gate is <b>{'relaxed' if weekend_mode else 'enforced'}</b> on the next "
+    f"refresh. Price / avg-volume / near-high / SMA200 gates always apply.</div>",
+    unsafe_allow_html=True)
+
 st.markdown("<div class='pp-section'>Scan thresholds</div>", unsafe_allow_html=True)
 st.markdown("<div class='pp-sub'>Read-only for now — thresholds live in "
             "<code>pinpoint/config.py</code> (the single source of truth).</div>",
@@ -48,7 +65,7 @@ rows = [
     ("Version", f"v{__version__}"),
     ("Price gate", f"> ${g.min_price:.0f}"),
     ("Avg volume gate", f">= {g.min_avg_volume:,}"),
-    ("RVOL gate", f"> {g.min_rel_volume}"),
+    ("RVOL gate", f"> {g.min_rel_volume} (relaxed when market closed / weekend mode)"),
     ("RS proxy gate", f"> {g.min_rs_rating}"),
     ("Near-high gate", f"<= {g.max_pct_below_high:.0f}% below 52w high"),
     ("Min R:R for Focus", f"{CONFIG.entry.min_reward_risk:.0f}:1"),

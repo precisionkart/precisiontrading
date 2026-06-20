@@ -26,6 +26,38 @@ def _delay_default() -> float:
         return 1.0
 
 
+def market_is_open(now=None) -> bool:
+    """True only during the US regular session: Mon-Fri, 09:30-16:00 ET.
+
+    Used to relax the relative-volume gate off-hours/weekends — RVOL is naturally
+    low when the market is closed, so a live snapshot would gate out every name.
+    Evaluates in America/New_York (DST-correct) when zoneinfo is available; a
+    passed `now` is converted to ET if it's timezone-aware. Falls back to a UTC
+    approximation (14:30-21:00 UTC ≈ the ET session during EDT) only if zoneinfo
+    is unavailable."""
+    import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        et = ZoneInfo("America/New_York")
+        if now is None:
+            now = datetime.datetime.now(et)
+        elif now.tzinfo is not None:
+            now = now.astimezone(et)              # interpret any tz in ET
+        if now.weekday() >= 5:                    # weekend
+            return False
+        open_t = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        close_t = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        return open_t <= now <= close_t
+    except Exception:  # noqa: BLE001 — zoneinfo unavailable: UTC approximation
+        if now is None:
+            now = datetime.datetime.now(datetime.timezone.utc)
+        if now.weekday() >= 5:
+            return False
+        open_t = now.replace(hour=14, minute=30, second=0, microsecond=0)
+        close_t = now.replace(hour=21, minute=0, second=0, microsecond=0)
+        return open_t <= now <= close_t
+
+
 # ---------------------------------------------------------------------------
 # 3.3  UNIVERSE GATES — hard filters; every candidate must pass ALL of these.
 # ---------------------------------------------------------------------------

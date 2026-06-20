@@ -18,6 +18,7 @@ CLOUD = c.cloud_mode()
 scan = st.session_state.get("scan")
 
 c.page_header("Today")
+c.weekend_banner()
 if not scan:
     if CLOUD:
         msg = "No published scan found (data/latest_scan.json)."

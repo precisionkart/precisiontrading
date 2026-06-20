@@ -681,12 +681,14 @@ class UniverseResult:
     ok: bool = True
 
 
-def build_universe(client, top_n: int = 500, min_growth: bool = False) -> tuple[pd.DataFrame, list[str]]:
+def build_universe(client, top_n: int = 500, min_growth: bool = False,
+                   relax_rvol=None) -> tuple[pd.DataFrame, list[str]]:
     """Build the normalized leader universe from Massive via the screener:
     all active US stocks -> price/volume filter -> top-N OHLCV enrichment ->
     fundamentals -> §3.3 gates. Returns (normalized_universe, warnings).
 
-    `min_growth` adds the hard EPS/Sales QoQ>=25% filter (3.4) post-enrichment."""
+    `min_growth` adds the hard EPS/Sales QoQ>=25% filter (3.4) post-enrichment.
+    `relax_rvol` (None=auto via market_is_open) drops the RVOL gate off-hours."""
     g = CONFIG.gates
     warnings: list[str] = []
     uni = screener_mod.build_universe_df(client, min_price=g.min_price,
@@ -698,7 +700,8 @@ def build_universe(client, top_n: int = 500, min_growth: bool = False) -> tuple[
     uni = screener_mod.enrich_with_fundamentals(uni, client)
     uni = screener_mod.apply_universe_gates(
         uni, min_price=g.min_price, min_avg_volume=g.min_avg_volume,
-        max_pct_below_high=g.max_pct_below_high, require_above_sma200=True)
+        max_pct_below_high=g.max_pct_below_high, require_above_sma200=True,
+        min_rel_volume=g.min_rel_volume, relax_rvol=relax_rvol)
     if min_growth and len(uni):
         uni = uni[(uni.get("eps_qoq", pd.Series(dtype=float)) >= CONFIG.fundamentals.min_eps_qoq_growth)
                   & (uni.get("sales_qoq", pd.Series(dtype=float)) >= CONFIG.fundamentals.min_sales_growth)]
@@ -713,19 +716,26 @@ def fetch_targets_universe(client, regime: Regime, min_growth: bool = False,
                            no_industry_gate: bool = False) -> UniverseResult:
     """Build the universe once from Massive and rank Targets. Returns both
     Targets and the normalized universe for downstream Focus enrichment (avoids
-    re-scanning for --all). `ignore_rvol` is accepted for call-site
-    compatibility; the screener already filters on average volume, and RVOL is a
-    weighted scoring layer, so off-hours prep runs need no special handling."""
-    universe, warnings = build_universe(client, min_growth=min_growth)
+    re-scanning for --all).
+
+    The RVOL gate is relaxed when `ignore_rvol=True` OR the market is closed
+    (weekend / after-hours) — RVOL is naturally low off-hours so an enforced gate
+    would empty the list. The relaxation applies to BOTH the screener gate and the
+    per-row evaluate_gates check, from this single decision."""
+    from .config import market_is_open
+    relax = bool(ignore_rvol) or not market_is_open()
+    universe, warnings = build_universe(client, min_growth=min_growth, relax_rvol=relax)
     if universe is None or len(universe) == 0:
         return UniverseResult(df=pd.DataFrame(), universe=pd.DataFrame(),
                               warnings=warnings, ok=False)
+    if relax and not ignore_rvol:
+        warnings.append("Weekend/after-hours scan — RVOL gate relaxed.")
 
     # RS across the full built universe (percentile only means anything at scale).
     universe = _inject_broad_rs(client, universe, warnings)
 
     targets = build_targets(universe, regime, raw_df=universe, theme_ctx=theme_ctx,
-                            ipo_ctx=ipo_ctx, ignore_rvol=ignore_rvol,
+                            ipo_ctx=ipo_ctx, ignore_rvol=relax,
                             no_industry_gate=no_industry_gate)
     return UniverseResult(df=targets, universe=universe, warnings=warnings, ok=True)
 
