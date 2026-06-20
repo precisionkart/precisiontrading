@@ -88,32 +88,48 @@ regime_state = getattr(scan.get("regime"), "state", "neutral")
 # ---- KPI strip ----
 ui.kpi_strip(regime_state, n_setups=len(tiers), n_open=len(lives), open_r=open_r)
 
-# ---- Sector strength + open positions, side by side ----
-col_l, col_r = st.columns([1.12, 1], gap="medium")
+# Split the Elite tier: the #1 setup becomes the "focus" card up top (beside the
+# positions widget, like the mockup); the rest fall into the ranked list below.
+t1_rows = list(t1.iterrows())
+focus_row = t1_rows[0] if t1_rows else None
+rest_t1 = t1_rows[1:]
+
+# ---- Today's focus + open positions, side by side (mockup grid-a) ----
+col_l, col_r = st.columns([1.62, 1], gap="medium")
 with col_l:
-    ui.sector_ladder(scan.get("themes", []))
+    if focus_row is not None:
+        _, frow = focus_row
+        ui.setup_card(frow.to_dict(), detail_fn, key="focus0",
+                      ef=str(frow.get("Ticker")) in ef_tickers, tier=1, focus=True)
+    else:
+        st.markdown("<div class='pp-empty'>No Elite setup today.</div>",
+                    unsafe_allow_html=True)
 with col_r:
     ui.positions_widget(lives)
 
-# ---- Setups (ranked compact cards) ----
-st.markdown("<div class='ppx-h'>Today's setups</div>", unsafe_allow_html=True)
-st.markdown(
-    f"<div class='ppx-sub'>Ranked {scanned} · {len(t1)} Elite · "
-    f"{len(t2)} Good · {len(t3)} Watch</div>", unsafe_allow_html=True)
+# ---- Sector strength + the rest of the setups, side by side (mockup grid-b) ----
+col_sl, col_sr = st.columns([1, 1.62], gap="medium")
+with col_sl:
+    ui.sector_ladder(scan.get("themes", []))
+with col_sr:
+    st.markdown("<div class='ppx-h' style='margin-top:0'>Today's setups</div>",
+                unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='ppx-sub'>Ranked {scanned} · {len(t1)} Elite · "
+        f"{len(t2)} Good · {len(t3)} Watch</div>", unsafe_allow_html=True)
 
-if len(tiers) == 0:
-    st.markdown("<div class='pp-empty'>No names scored 50+.</div>", unsafe_allow_html=True)
+    if len(tiers) == 0:
+        st.markdown("<div class='pp-empty'>No names scored 50+.</div>",
+                    unsafe_allow_html=True)
 
-_ci = 0
-if len(t1):
-    for _i, (_, row) in enumerate(t1.iterrows()):
+    _ci = 0
+    for _, row in rest_t1:
         ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                      ef=str(row.get("Ticker")) in ef_tickers, tier=1,
-                      focus=(_i == 0)); _ci += 1
-if len(t2):
-    for _, row in t2.iterrows():
-        ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                      ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
+                      ef=str(row.get("Ticker")) in ef_tickers, tier=1); _ci += 1
+    if len(t2):
+        for _, row in t2.iterrows():
+            ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
+                          ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
 if len(t3):
     st.markdown("<div class='ppx-h' style='font-size:14px;margin-top:18px'>Watchlist (50-64)"
                 "</div>", unsafe_allow_html=True)
