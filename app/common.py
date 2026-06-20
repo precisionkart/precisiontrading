@@ -219,18 +219,26 @@ def heat_badge_html() -> str:
             f"Heat: {heat:.1f}% / {cap:.1f}% across {len(positions)} open</span>")
 
 
-def page_header(title: str, subtitle: str = None) -> None:
+def page_header(title: str, subtitle: str = None, show_refresh: bool = True) -> None:
     """Consistent page header on every page: title (left) + portfolio-heat +
-    an absolute 'Last refreshed' timestamp with a status dot (right). `title` may
-    contain inline HTML; `subtitle` renders as the usual pp-sub line below."""
+    an absolute 'Last refreshed' timestamp with a status dot, and a primary
+    '↻ Refresh' button pinned TOP RIGHT (Change 1-3). `title` may contain inline
+    HTML; `subtitle` renders as the usual pp-sub line below. Clicking Refresh runs
+    the same scan as the sidebar button, with a live progress bar."""
     scan = st.session_state.get("scan")
     label, color = refresh_status(scan)
-    st.markdown(
-        f"<div class='pp-header'><div class='pp-h1'>{title}</div>"
-        f"<div class='pp-headmeta'>{heat_badge_html()}"
-        f"<span class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
-        f"Last refreshed: {_html.escape(label)}</span></div></div>",
-        unsafe_allow_html=True)
+    hdr, btn = st.columns([8, 1], vertical_alignment="center")
+    with hdr:
+        st.markdown(
+            f"<div class='pp-header'><div class='pp-h1'>{title}</div>"
+            f"<div class='pp-headmeta'>{heat_badge_html()}"
+            f"<span class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
+            f"Last refreshed: {_html.escape(label)}</span></div></div>",
+            unsafe_allow_html=True)
+    with btn:
+        if show_refresh and st.button("↻ Refresh", key="top_refresh", type="primary",
+                                      help="Run a fresh live scan"):
+            run_refresh()
     if subtitle:
         st.markdown(f"<div class='pp-sub'>{subtitle}</div>", unsafe_allow_html=True)
 
@@ -258,15 +266,7 @@ def sidebar_footer(scan, cloud: bool) -> None:
         st.markdown(f"<div class='pp-asof'>Data as of {_html.escape(scan.get('as_of') or '—')}</div>",
                     unsafe_allow_html=True)
     if st.button("↻", key="side_refresh", help="Refresh scan (live Massive)"):
-        new = load_published() if cloud else full_scan()
-        st.session_state["scan"] = new
-        if new:
-            st.session_state["_refresh_toast"] = (
-                f"Refreshed: {_n(new.get('focus'))} Focus, {_n(new.get('targets'))} "
-                f"Targets, {_n(new.get('earnings'))} Earnings, {_n(new.get('ipo'))} IPOs")
-        for k in ("watchlist_graded_key", "open_cards", "detail_cache", "sector_filter"):
-            st.session_state.pop(k, None)
-        st.rerun()
+        run_refresh(cloud)
 
 
 @st.cache_resource
@@ -307,10 +307,21 @@ def warning_banner(warnings: list) -> None:
 # ---------------------------------------------------------------------------
 # Full scan (persists to store).
 # ---------------------------------------------------------------------------
-def full_scan(ignore_rvol: bool = False) -> dict:
+def full_scan(ignore_rvol: bool = False, progress_cb=None) -> dict:
+    """Run a full live scan and persist it. `progress_cb(pct, text)` (optional)
+    drives the main-page progress bar; it's called at each stage with an integer
+    percent and a human status. Scan logic is unchanged — only reporting."""
+    def _p(pct: int, text: str) -> None:
+        if progress_cb:
+            try:
+                progress_cb(pct, text)
+            except Exception:  # noqa: BLE001 — never let UI reporting break a scan
+                pass
+
     client = get_client()
     warnings: list[str] = []
 
+    _p(0, "Connecting to Massive...")
     with st.spinner("Reading market regime (SPY/QQQ)..."):
         reg = regime_mod.fetch_regime(client)
     with st.spinner("Ranking sector/theme ETFs and industry groups..."):
@@ -320,27 +331,33 @@ def full_scan(ignore_rvol: bool = False) -> dict:
     with st.spinner("Tracking recent IPOs vs their initial highs..."):
         ipo_res = ipo_mod.build_ipo_watchlist(client)
         warnings += ipo_res.warnings
-    with st.spinner("Fetching Finviz screens and ranking Targets..."):
+    _p(10, "Building universe (fetching snapshots)...")
+    with st.spinner("Building the leader universe from Massive..."):
+        _p(30, "Filtering universe gates...")
         uni = pipeline.fetch_targets_universe(client, reg, theme_ctx=theme_ctx,
                                               ipo_ctx=ipo_res.ipo_ctx, ignore_rvol=ignore_rvol)
         warnings += uni.warnings
+    _p(40, "Fetching OHLCV for top candidates...")
     with st.spinner("Enriching Focus with OHLCV (patterns, entries, R:R)..."):
         index_daily = ohlcv_mod.fetch_daily(CONFIG.regime.benchmarks[0]).df
+        _p(60, "Running pattern detection...")
         focus = pipeline.enrich_focus(uni.df, uni.universe, reg, index_daily=index_daily,
                                       theme_ctx=theme_ctx, ipo_ctx=ipo_res.ipo_ctx)
+    _p(70, "Scoring setups...")
     with st.spinner("Scanning overnight earnings reactions..."):
-        ern = pipeline.run_earnings(client)
+        ern = pipeline.run_earnings(client, universe=uni.universe)
         warnings += ern.warnings
 
     as_of = now_hhmm()
-    # RS reference for My-Picks must be BROAD (no RVOL gate), per the 7B note.
+    # RS reference for My-Picks: the built leader universe already carries a broad
+    # RS percentile, so we snapshot it directly (Massive has no separate screen).
+    _p(80, "Ranking by RS...")
     with st.spinner("Saving a broad RS reference universe..."):
-        from pinpoint.config import RS_REFERENCE_SCREEN
-        ref = client.fetch_universe(RS_REFERENCE_SCREEN, views=("performance",))
-        if not ref.empty:
-            store.save_universe_snapshot(pipeline.normalize_universe(ref.df))
+        if uni.universe is not None and len(uni.universe):
+            store.save_universe_snapshot(uni.universe)
     lists = {"focus": focus, "targets": uni.df, "earnings": ern.df,
              "earnings_down": ern.down, "ipo": ipo_res.watchlist}
+    _p(90, "Saving results...")
     with st.spinner("Updating snapshot (cache + published blob)..."):
         store.save_scan_cache(lists, reg, as_of, theme_rank=theme_ctx.theme_rank)
         # Watchlist v2: snapshot per name + resolve paper trades (tagged "manual").
@@ -363,11 +380,67 @@ def full_scan(ignore_rvol: bool = False) -> dict:
                                       index_levels=pipeline.fetch_index_levels())
         except Exception as exc:  # noqa: BLE001
             warnings.append(f"re-publish skipped: {exc}")
+    _p(100, f"Scan complete — {_n(focus)} setups found")
     return {"regime": RegimeView(reg.state, reg.rationale), "theme_ctx": theme_ctx,
             "themes": store._themes_list(theme_ctx.theme_rank),
             "focus": focus, "targets": uni.df, "earnings": ern.df,
             "earnings_down": ern.down, "ipo": ipo_res.watchlist,
             "as_of": as_of, "warnings": warnings}
+
+
+# ---------------------------------------------------------------------------
+# Refresh trigger + live progress (shared by the sidebar + top-of-page buttons).
+# ---------------------------------------------------------------------------
+def run_refresh(cloud: bool = None) -> None:
+    """Run a refresh with a live progress bar, update session_state, and rerun.
+
+    Cloud mode just reloads the published blob (no live scan); local mode runs
+    full_scan() and reports stage-by-stage progress."""
+    if cloud is None:
+        cloud = cloud_mode()
+    if cloud:
+        new = load_published()
+    else:
+        progress = st.progress(0, text="Starting scan...")
+        status = st.empty()
+
+        def _cb(pct: int, text: str) -> None:
+            progress.progress(min(max(pct, 0), 100), text=text)
+            status.markdown(f"<div class='pp-scan-status'>{_html.escape(text)}</div>",
+                            unsafe_allow_html=True)
+
+        new = full_scan(progress_cb=_cb)
+        progress.empty()
+        status.empty()
+    st.session_state["scan"] = new
+    if new:
+        st.session_state["_refresh_toast"] = (
+            f"Refreshed: {_n(new.get('focus'))} Focus, {_n(new.get('targets'))} "
+            f"Targets, {_n(new.get('earnings'))} Earnings, {_n(new.get('ipo'))} IPOs")
+    for k in ("watchlist_graded_key", "open_cards", "detail_cache", "sector_filter",
+              "wlpage_key", "wlpage", "wlstrip_key"):
+        st.session_state.pop(k, None)
+    st.rerun()
+
+
+def top_refresh_bar() -> None:
+    """A primary '↻ Refresh' button pinned to the TOP RIGHT of the main content
+    area, with the absolute 'Last refreshed' timestamp beside it. Renders on every
+    page (call right after page_header). Shares the exact refresh logic the
+    sidebar button uses, now with a live progress bar."""
+    cloud = cloud_mode()
+    scan = st.session_state.get("scan")
+    label, color = refresh_status(scan)
+    c1, c2 = st.columns([8, 1])
+    with c1:
+        st.markdown(
+            f"<div class='pp-toprefresh'>"
+            f"<span class='pp-rdot' style='background:{color}'></span>"
+            f"Last refreshed: {_html.escape(label)}</div>", unsafe_allow_html=True)
+    with c2:
+        if st.button("↻ Refresh", key="top_refresh", type="primary",
+                     help="Run a fresh live scan"):
+            run_refresh(cloud)
 
 
 def reference_universe():

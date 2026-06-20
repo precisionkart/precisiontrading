@@ -226,6 +226,10 @@ section[data-testid="stSidebar"] > div { width: 300px !important; }
 .pp-refresh { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); white-space:nowrap; }
 .pp-rdot { display:inline-block; width:8px; height:8px; border-radius:999px; margin-right:6px; vertical-align:middle; }
 .pp-headmeta { display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+.pp-scan-status { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); margin-top:4px; }
+.pp-toprefresh { font-family:'Geist Mono',monospace; font-size:12px; color:var(--gray); white-space:nowrap; text-align:right; }
+/* top-right primary refresh button sits flush to the page edge */
+div[class*="st-key-top_refresh"] button { width:100%; white-space:nowrap; }
 .pp-heatind { font-family:'Geist Mono',monospace; font-size:12px; white-space:nowrap; }
 .pp-sizing { font-size:12px; color:var(--ink); margin-top:8px; font-family:'Geist Mono',monospace; }
 .pp-sizing .note { color:var(--gray); font-size:11px; font-family:inherit; }
