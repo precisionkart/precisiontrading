@@ -95,22 +95,18 @@ class TelegramBot:
         return self.send("\n".join(lines))
 
     def send_market_open(self, pending, open_positions):
-        """2:30pm UK — Market Open ping."""
-        lines = ["🔔 *Market Open*\n"]
-        if pending:
-            lines.append(f"*Buy stops active: {len(pending)}*")
-            lines.append(" · ".join(f"`{p['ticker']}` ${p['entry']:.2f}" for p in pending[:5]))
-        else:
-            lines.append("*No buy stops pending*")
-        lines.append("")
-        if open_positions:
-            lines.append(f"*Positions live: {len(open_positions)}*")
-            for p in open_positions:
-                rr = p.get("current_rr", 0)
-                emoji = "✅" if rr >= 1 else "🟡" if rr >= 0 else "🔴"
-                lines.append(f"{emoji} `{p['ticker']}` {'+' if rr >= 0 else ''}{rr:.1f}R")
-        lines.append("\n_Monitor running. Will alert on any triggers._")
-        return self.send("\n".join(lines))
+        """2:30pm UK -- Market Open ping."""
+        import requests
+        msg = "🔔 MARKET OPENNN!\n\nWe don't start dialing at 9:30 because our clients are already answering the phone. Three. Two. One. Let's f*ck!"
+        try:
+            resp = requests.post(
+                f"https://api.telegram.org/bot{self.token}/sendMessage",
+                json={"chat_id": self.chat_id, "text": msg},
+                timeout=10,
+            )
+            return resp.ok
+        except Exception:
+            return False
 
     def send_market_close(self, open_positions, closed_today):
         """9:00pm UK — Market Close summary."""
