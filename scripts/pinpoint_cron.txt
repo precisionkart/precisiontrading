@@ -1,0 +1,34 @@
+# Pinpoint Telegram alert schedule.
+# Tickers are US stocks; all DISPLAY times in messages are UK time.
+# US regular session = 14:30–21:00 UK (BST).
+#
+# IMPORTANT: cron fires in the HOST machine's LOCAL time. Pick the block that
+# matches where this actually runs. UK observes DST (BST=UTC+1 summer,
+# GMT+0 winter); Dubai does not — so the offset shifts at the UK DST switch.
+#
+# ─────────────────────────────────────────────────────────────────────────
+# OPTION A — UTC host (a cloud VM, or GitHub Actions). RECOMMENDED.
+#   These are the spec's intended values and are DST-stable only for BST
+#   (summer). For winter (GMT) subtract 1 hour from each.
+# ─────────────────────────────────────────────────────────────────────────
+# 0  7  * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python scan.py --earnings   >> /tmp/pinpoint_morning.log 2>&1   # 08:00 UK morning brief
+# 30 13 * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python market_bells.py open  >> /tmp/pinpoint_bells.log   2>&1   # 14:30 UK open bell
+# */5 13-20 * * 1-5 cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python monitor.py         >> /tmp/pinpoint_monitor.log 2>&1   # session monitor
+# 0  20 * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python market_bells.py close >> /tmp/pinpoint_bells.log   2>&1   # 21:00 UK close bell
+# 30 20 * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python scan.py --all         >> /tmp/pinpoint_scan.log    2>&1   # 21:30 UK EOD scan
+#
+# ─────────────────────────────────────────────────────────────────────────
+# OPTION B — this Mac (Asia/Dubai, UTC+4) in BST season (UK = Dubai − 3h).
+#   The UK evening lands next-day in Dubai, so close/EOD/late-monitor run on
+#   the FOLLOWING calendar day (hence weekday ranges differ). Re-check at the
+#   UK DST change (late Oct / late Mar) — offset becomes −4h in winter.
+# ─────────────────────────────────────────────────────────────────────────
+# 0  11 * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python scan.py --earnings   >> /tmp/pinpoint_morning.log 2>&1   # 08:00 UK = 11:00 Dubai
+# 30 17 * * 1-5  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python market_bells.py open  >> /tmp/pinpoint_bells.log   2>&1   # 14:30 UK = 17:30 Dubai
+# */5 17-23 * * 1-5 cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python monitor.py         >> /tmp/pinpoint_monitor.log 2>&1   # session monitor (evening Dubai)
+# */5 0 * * 2-6  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python monitor.py            >> /tmp/pinpoint_monitor.log 2>&1   # final session ticks after Dubai midnight
+# 0  0  * * 2-6  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python market_bells.py close >> /tmp/pinpoint_bells.log   2>&1   # 21:00 UK = 00:00 Dubai (next day)
+# 30 0  * * 2-6  cd /Users/dylancooper/pinpoint_scanner && .venv/bin/python scan.py --all         >> /tmp/pinpoint_scan.log    2>&1   # 21:30 UK = 00:30 Dubai (next day)
+#
+# Install (uncomment ONE block above, then):
+#   (crontab -l 2>/dev/null | grep -v pinpoint; grep -v '^#' scripts/pinpoint_cron.txt) | crontab -

@@ -281,7 +281,118 @@ def run_live(args) -> int:
 
     _print_written_files(wrote_cache, want_targets or want_focus)
     _print_final_status(targets, focus, earnings_df, ipo_watch, any_403)
+    send_scan_telegram(args)
     return 0
+
+
+def send_scan_telegram(args) -> None:
+    """Best-effort Telegram alerts off the saved scan cache (Part 3). Morning
+    brief on `--earnings`; EOD scan + watchlist promotions/degradations + Friday
+    wrap on `--all`/`--targets`. Never raises — Telegram never blocks a scan."""
+    try:
+        from pinpoint.telegram import get_bot
+        bot = get_bot()
+        if not bot.enabled:
+            return
+        import datetime
+        from pinpoint import store as _store
+        from pinpoint.watchlist_tracker import (load_watchlist, save_watchlist,
+                                                update_watchlist)
+        try:
+            import pytz
+            now_uk = datetime.datetime.now(pytz.timezone("Europe/London"))
+        except Exception:  # noqa: BLE001
+            now_uk = datetime.datetime.now()
+
+        cache = _store.load_scan_cache()
+        if not cache:
+            return
+
+        # scan_results from focus (enriched) + targets — focus wins on dupes.
+        def _f(x, d=0.0):
+            try:
+                v = float(x)
+                return v if v == v else d
+            except (TypeError, ValueError):
+                return d
+        by_tk = {}
+        for df in (cache.lists.get("targets"), cache.lists.get("focus")):
+            if df is None or not len(df):
+                continue
+            for _, row in df.iterrows():
+                entry = _f(row.get("entry_trigger")); stop = _f(row.get("stop"))
+                risk = entry - stop if (entry and stop and entry > stop) else 0.0
+                t3, t5 = _f(row.get("target_3r")), _f(row.get("target_5r"))
+                tk = str(row.get("ticker") or "")
+                if not tk:
+                    continue
+                by_tk[tk] = {
+                    "ticker": tk, "score": _f(row.get("pinpoint_score")),
+                    "pattern": str(row.get("pattern") or "").split(" /")[0],
+                    "entry": entry, "stop": stop,
+                    "target_3r": t3 or (entry + 3 * risk if risk else 0.0),
+                    "target_5r": t5 or (entry + 5 * risk if risk else 0.0),
+                    "rr": _f(row.get("reward_risk")), "rs": _f(row.get("rs")),
+                    "sma200_pct": _f(row.get("sma200_pct")),
+                }
+        scan_results = list(by_tk.values())
+
+        open_positions = _store.open_positions()
+        sectors = []
+        for t in (cache.themes or []):
+            sectors.append({"name": (t.get("theme") or t.get("name") or str(t))
+                            if isinstance(t, dict) else str(t)})
+
+        is_eod = bool(getattr(args, "all", False) or getattr(args, "targets", False))
+        is_morning = bool(getattr(args, "earnings", False)) and not is_eod
+
+        if is_morning:
+            wl = load_watchlist()
+            stalking = [{"ticker": t, "entry": e.entry, "stop": e.stop,
+                         "pattern": e.pattern, "rs": e.rs, "score": e.score}
+                        for t, e in wl.items() if e.status == "STALKING"]
+            watching = [{"ticker": t, "score": e.score, "reason": "needs more time"}
+                        for t, e in wl.items() if e.status == "WATCHING"][:5]
+            earnings_today = []
+            edf = cache.lists.get("earnings")
+            if edf is not None and len(edf):
+                for _, r in edf.head(3).iterrows():
+                    earnings_today.append({"ticker": str(r.get("ticker") or ""), "when": "today"})
+            bot.send_morning_brief(regime=cache.regime_state, stalking=stalking,
+                                   watching=watching, earnings_today=earnings_today,
+                                   open_positions=open_positions, sectors=sectors)
+            print("✅ Telegram morning brief sent")
+            return
+
+        if is_eod:
+            wl = load_watchlist()
+            wl, new_entries, promoted, degraded = update_watchlist(scan_results, wl)
+            save_watchlist(wl)
+            new_setups = [{"ticker": r["ticker"], "pattern": r["pattern"], "entry": r["entry"],
+                           "rr": r["rr"], "score": r["score"]}
+                          for r in scan_results if r["score"] >= 75][:3]
+            bot.send_eod_scan(regime=cache.regime_state, new_setups=new_setups,
+                              promoted=promoted, degraded=degraded,
+                              open_positions=open_positions, sectors=sectors)
+            for p in promoted:
+                bot.send_watchlist_promoted(**p)
+            for d in degraded:
+                bot.send_watchlist_degraded(**d)
+            top = new_setups[0] if new_setups else {}
+            bot.send_scan_complete(n_setups=len(new_setups), top_ticker=top.get("ticker", "none"),
+                                   top_score=top.get("score", 0), regime=cache.regime_state)
+            if now_uk.weekday() == 4:                       # Friday weekly wrap
+                all_pos = _store.load_positions()
+                wk_start = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
+                week_trades = [p for p in all_pos
+                               if (str(p.get("exit_date", ""))[:10] >= wk_start
+                                   or p.get("status") == "OPEN")]
+                week_r = sum(_f(p.get("r_multiple")) for p in week_trades)
+                weekend = [t for t, e in wl.items() if e.status in ("STALKING", "WATCHING")][:6]
+                bot.send_weekly_wrap(week_r=week_r, trades=week_trades, weekend_watchlist=weekend)
+            print("✅ Telegram EOD alerts sent")
+    except Exception as exc:  # noqa: BLE001 — Telegram must never break a scan
+        print(f"   (telegram alerts skipped: {exc})")
 
 
 def _print_written_files(wrote_cache: bool, wrote_targets_snap: bool) -> None:

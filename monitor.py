@@ -154,12 +154,47 @@ def _send_telegram(text) -> bool:
         return False
 
 
+def _check_pending(positions: list) -> int:
+    """Promote PENDING positions to OPEN when their buy-stop entry is hit, and
+    fire an entry-triggered Telegram. Returns the number promoted; rewrites
+    positions.json when any change."""
+    pending = [p for p in positions if str(p.get("status", "")).upper() == "PENDING"]
+    if not pending:
+        return 0
+    from pinpoint.telegram import get_bot
+    bot = get_bot()
+    promoted = 0
+    for pos in pending:
+        tk = str(pos.get("ticker", "")).upper()
+        entry = pos.get("entry")
+        res = ohlcv_mod.fetch_daily(tk, cache_only=True)
+        price = float(res.df["Close"].iloc[-1]) if not res.empty else None
+        if price is None or not entry or price < float(entry):
+            continue
+        pos["status"] = "OPEN"
+        pos.setdefault("entry_date", _now_iso()[:10])
+        promoted += 1
+        print(f"  PENDING→OPEN: {tk} (price {price:.2f} >= entry {float(entry):.2f})")
+        bot.send_entry_triggered(ticker=tk, entry=float(entry), stop=float(pos.get("stop", 0) or 0),
+                                 target_3r=float(pos.get("target_3r", 0) or 0),
+                                 target_5r=float(pos.get("target_5r", 0) or 0),
+                                 pattern=str(pos.get("setup", "")), shares=int(pos.get("shares", 0) or 0))
+    if promoted:
+        _atomic_write(POSITIONS_PATH, positions)
+    return promoted
+
+
 def main() -> int:
     positions = _load_json(POSITIONS_PATH, [])
     if not isinstance(positions, list):
         positions = []
+
+    # 1) PENDING buy-stops: promote to OPEN + alert when their entry triggers.
+    _check_pending(positions)
+
+    # 2) exit monitoring runs on filled (OPEN-ish) positions only — never PENDING.
     open_positions = [p for p in positions
-                      if str(p.get("status", "open")).lower() not in ("closed", "resolved")]
+                      if str(p.get("status", "open")).lower() not in ("closed", "resolved", "pending")]
 
     print(f"monitor: {len(open_positions)} open position(s)")
     if not open_positions:
@@ -192,11 +227,20 @@ def main() -> int:
     combined = (existing + new_alerts)[-MAX_ALERTS:]
     _atomic_write(ALERTS_PATH, combined)
 
-    # notify on CRITICAL / HIGH
+    # notify on CRITICAL / HIGH via the formatted Pinpoint Telegram alert
     notable = [a for a in new_alerts if a["urgency"] in ("CRITICAL", "HIGH")]
     sent = 0
+    try:
+        from pinpoint.telegram import get_bot
+        bot = get_bot()
+    except Exception:  # noqa: BLE001
+        bot = None
     for a in notable:
-        if _send_telegram(f"⚠️ {a['urgency']} — {a['message']}\nAction: {a['action']}"):
+        payload = {**a, "type": a.get("kind")}      # monitor uses 'kind'; bot wants 'type'
+        if bot is not None and bot.enabled:
+            if bot.send_position_alert(payload):
+                sent += 1
+        elif _send_telegram(f"⚠️ {a['urgency']} — {a['message']}\nAction: {a['action']}"):
             sent += 1
 
     print(f"monitor: {len(new_alerts)} alert(s) "
