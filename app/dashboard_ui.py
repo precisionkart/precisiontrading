@@ -133,6 +133,24 @@ _CSS = """
 .ppx-lvl b{font-family:var(--ppx-mono);font-weight:700;font-size:16px;color:var(--ppx-ink);display:block;margin-top:3px}
 .ppx-lvl b.bull{color:var(--ppx-bull)}.ppx-lvl b.bear{color:var(--ppx-bear)}
 .ppx-ef{font-size:10px;font-weight:700;color:#B5730A;background:var(--ppx-warn-soft);border-radius:6px;padding:2px 7px;margin-left:6px}
+.ppx-lvl .sub{font-family:var(--ppx-mono);font-size:10px;color:var(--ppx-muted);margin-top:2px}
+
+/* focus card middle band — chart, ATR caption, signal tags, checklist */
+.ppx-chart{padding:14px 2px 2px}
+.ppx-chart svg{width:100%;height:84px;display:block}
+.ppx-chart .cap{font-family:var(--ppx-mono);font-size:11px;color:var(--ppx-muted);margin-top:6px}
+.ppx-signals{display:flex;flex-wrap:wrap;gap:7px;padding:10px 2px 2px}
+.ppx-tag{font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:7px;display:inline-flex;align-items:center;gap:6px}
+.ppx-tag .dot{width:6px;height:6px;border-radius:99px}
+.ppx-tag.bull{background:var(--ppx-bull-soft);color:#0F8B5C}.ppx-tag.bull .dot{background:#22C77E}
+.ppx-tag.warn{background:var(--ppx-warn-soft);color:#B5730A}.ppx-tag.warn .dot{background:var(--ppx-warn)}
+.ppx-check{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:12px 2px 2px}
+.ppx-check .score{display:flex;align-items:center;gap:9px;min-width:180px;flex:1}
+.ppx-check .score .ppx-meter{flex:1}
+.ppx-check .score .lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
+.ppx-check .score b{font-family:var(--ppx-mono);font-weight:700;color:var(--ppx-ink);font-size:14px}
+.ppx-miss{display:flex;gap:7px;flex-wrap:wrap}
+.ppx-miss .x{font-size:11.5px;font-weight:600;color:#C0383C;background:var(--ppx-bear-soft);border-radius:7px;padding:4px 9px;display:inline-flex;align-items:center;gap:5px}
 
 /* round the bordered st.containers used for setup cards + positions (best-effort) */
 [class*="st-key-ppxcard"] div[data-testid="stVerticalBlockBorderWrapper"],
@@ -363,7 +381,118 @@ def positions_widget(lives: list | None = None) -> None:
 # ---------------------------------------------------------------------------
 # Setup card — compact, RS/Score-forward, with the inline detail expander.
 # ---------------------------------------------------------------------------
-def _card_body(row: dict, spark: str, price: float, chg, ef: bool, focus: bool) -> str:
+def _focus_chart_svg(closes: list, entry, stop) -> str:
+    """Mockup-style area chart from real closes, with dashed entry (green) and
+    stop (red) guide lines placed at their true price levels. viewBox 560x88."""
+    pts = [c for c in (closes or []) if isinstance(c, (int, float)) and c == c]
+    pts = pts[-80:]
+    if len(pts) < 2:
+        return ""
+    W, H, pad = 560.0, 88.0, 8.0
+    lo, hi = min(pts), max(pts)
+    # include entry/stop in the vertical range so their guide lines sit correctly
+    extra = [v for v in (entry, stop) if isinstance(v, (int, float)) and v == v]
+    lo = min([lo] + extra)
+    hi = max([hi] + extra)
+    rng = (hi - lo) or 1.0
+
+    def y(v):
+        return pad + (hi - v) / rng * (H - 2 * pad)
+
+    def x(i):
+        return i / (len(pts) - 1) * W
+
+    line = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(pts))
+    area = f"M0,{H:.0f} L" + " L".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(pts)) + f" L{W:.0f},{H:.0f} Z"
+    guides = ""
+    if isinstance(entry, (int, float)) and entry == entry:
+        guides += (f"<line x1='0' y1='{y(entry):.1f}' x2='{W:.0f}' y2='{y(entry):.1f}' "
+                   "stroke='#16A06A' stroke-width='1' stroke-dasharray='4 4' opacity='0.55'/>")
+    if isinstance(stop, (int, float)) and stop == stop:
+        guides += (f"<line x1='0' y1='{y(stop):.1f}' x2='{W:.0f}' y2='{y(stop):.1f}' "
+                   "stroke='#E5484D' stroke-width='1' stroke-dasharray='4 4' opacity='0.5'/>")
+    lx, ly = x(len(pts) - 1), y(pts[-1])
+    return (
+        "<div class='ppx-chart'><svg viewBox='0 0 560 88' preserveAspectRatio='none' fill='none'>"
+        "<defs><linearGradient id='ppxfill' x1='0' y1='0' x2='0' y2='1'>"
+        "<stop offset='0' stop-color='#4F46E5' stop-opacity='0.12'/>"
+        "<stop offset='1' stop-color='#4F46E5' stop-opacity='0'/></linearGradient></defs>"
+        f"{guides}"
+        f"<path d='{area}' fill='url(#ppxfill)'/>"
+        f"<polyline points='{line}' stroke='#4F46E5' stroke-width='2' "
+        "stroke-linecap='round' stroke-linejoin='round'/>"
+        f"<circle cx='{lx:.1f}' cy='{ly:.1f}' r='3.5' fill='#4F46E5' stroke='#fff' stroke-width='1.5'/>"
+        "</svg></div>")
+
+
+def _focus_band(pr, closes: list, entry, stop) -> str:
+    """The focus card's middle band — chart + ATR caption + signal tags +
+    checklist — all from the real analyzer result `pr`. Degrades gracefully:
+    chart always renders from closes; the rest appears once `pr` is available."""
+    chart = _focus_chart_svg(closes, entry, stop)
+
+    cap = ""
+    tags = ""
+    check = ""
+    if pr is not None:
+        atr = getattr(pr, "atr_14", None)
+        if isinstance(atr, (int, float)) and atr == atr:
+            def _a(k):
+                v = getattr(pr, k, None)
+                return f"{abs(v):.2f}" if isinstance(v, (int, float)) and v == v else "—"
+            cs = getattr(pr, "compression_score", None)
+            cs_txt = (f" &nbsp;·&nbsp; coil {cs:.0f}/25"
+                      if isinstance(cs, (int, float)) and cs == cs else "")
+            cap = (f"<div class='cap'>ATR(14) ${atr:.2f} &nbsp;·&nbsp; "
+                   f"5–10 {_a('spread_5_10_atr')} ATR &nbsp;·&nbsp; "
+                   f"10–20 {_a('spread_10_20_atr')} ATR &nbsp;·&nbsp; "
+                   f"price-to-20 {_a('spread_price_20_atr')} ATR{cs_txt}</div>")
+
+        def _items(v):
+            try:
+                return [str(x) for x in list(v) if str(x)]
+            except (TypeError, ValueError):
+                return []
+        flags = _items(getattr(pr, "flags", None))
+        warns = _items(getattr(pr, "warnings", None))
+        pills = ([f"<span class='ppx-tag bull'><span class='dot'></span>{_html.escape(x)}</span>"
+                  for x in flags[:4]]
+                 + [f"<span class='ppx-tag warn'><span class='dot'></span>{_html.escape(x)}</span>"
+                    for x in warns[:4]])
+        if pills:
+            tags = f"<div class='ppx-signals'>{''.join(pills)}</div>"
+
+        crit = getattr(pr, "criteria", None) or []
+        if crit:
+            total = len(crit)
+            passed = sum(1 for c_ in crit if getattr(c_, "passed", False))
+            pctw = passed / total * 100.0 if total else 0.0
+            g = ("ppx-g-strong" if pctw >= 90 else "ppx-g-good" if pctw >= 75
+                 else "ppx-g-ok" if pctw >= 60 else "ppx-g-weak")
+            misses = []
+            for c_ in crit:
+                if not getattr(c_, "passed", False):
+                    lab = _html.escape(str(getattr(c_, "label", "")))
+                    val = getattr(c_, "value", "")
+                    vtxt = f" · {_html.escape(str(val))}" if val else ""
+                    misses.append(f"<span class='x'>✕ {lab}{vtxt}</span>")
+            miss_html = f"<div class='ppx-miss'>{''.join(misses)}</div>" if misses else ""
+            check = (f"<div class='ppx-check'><div class='score {g}'>"
+                     f"<span class='lab'>Checklist</span>"
+                     f"<span class='ppx-meter'><span style='width:{pctw:.0f}%'></span></span>"
+                     f"<b>{passed}/{total}</b></div>{miss_html}</div>")
+
+    return chart + cap_wrap(cap) + tags + check
+
+
+def cap_wrap(cap: str) -> str:
+    # the ATR caption lives inside the chart block in the mockup; if we have a
+    # caption but the chart already closed, wrap it so spacing matches.
+    return f"<div class='ppx-chart' style='padding-top:0'>{cap}</div>" if cap else ""
+
+
+def _card_body(row: dict, spark: str, price: float, chg, ef: bool, focus: bool,
+               pr=None, closes: list | None = None) -> str:
     tk = _html.escape(str(row.get("Ticker", "")))
     pat = _html.escape(str(row.get("Pattern") or "—"))
     sect = _html.escape(str(row.get("Sector") or ""))
@@ -380,15 +509,25 @@ def _card_body(row: dict, spark: str, price: float, chg, ef: bool, focus: bool) 
         rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
         tgt = (f"${e + rr_ * risk:,.2f}"
                if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else "—")
+        risk_pct = f"{risk / e * 100:.1f}% risk" if e else "risk"
         levels = (
             "<div class='ppx-levels'>"
-            f"<div class='ppx-lvl'><i>Entry</i><b class='bull'>${e:,.2f}</b></div>"
-            f"<div class='ppx-lvl'><i>Stop</i><b class='bear'>${s_:,.2f}</b></div>"
-            f"<div class='ppx-lvl'><i>Target</i><b>{tgt}</b></div>"
-            f"<div class='ppx-lvl'><i>R : R</i><b>{rr_txt}</b></div>"
+            f"<div class='ppx-lvl'><i>Entry</i><b class='bull'>${e:,.2f}</b>"
+            "<div class='sub'>breakout trigger</div></div>"
+            f"<div class='ppx-lvl'><i>Stop</i><b class='bear'>${s_:,.2f}</b>"
+            f"<div class='sub'>{risk_pct}</div></div>"
+            f"<div class='ppx-lvl'><i>Target</i><b>{tgt}</b>"
+            "<div class='sub'>first objective</div></div>"
+            f"<div class='ppx-lvl'><i>R : R</i><b>{rr_txt}</b>"
+            "<div class='sub'>reward / risk</div></div>"
             "</div>")
     else:
         levels = ""
+
+    # focus-only middle band: chart + ATR caption + signal tags + checklist
+    band = ""
+    if focus:
+        band = _focus_band(pr, closes or [], c._num_or_none(e), c._num_or_none(s_))
 
     eyebrow = "<span class='ppx-eyebrow'>★ Today's focus</span>" if focus else ""
     ef_badge = "<span class='ppx-ef'>Earnings</span>" if ef else ""
@@ -404,6 +543,7 @@ def _card_body(row: dict, spark: str, price: float, chg, ef: bool, focus: bool) 
         f"{_grade_chip('Score', row.get('Score'))}</div>"
         "</div>"
         f"{levels}"
+        f"{band}"
         "</div>")
 
 
@@ -424,24 +564,66 @@ def setup_card(row: dict, detail_fn, key: str, tier: int = None,
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
     entry, stop = c._num_or_none(row.get("Entry")), c._num_or_none(row.get("Stop"))
+
+    # Focus card: render chart-first, then fill the rich band (ATR/tags/checklist)
+    # on the next beat. We fetch the analyzer detail only once per ticker and
+    # cache it in session, so the page never blocks on first paint.
+    pr = None
+    if focus:
+        warmed = st.session_state.setdefault("_focus_detail", {})
+        if tk in warmed:
+            pr = warmed[tk]
+        else:
+            # paint now without detail; warm it and rerun so the band fills in.
+            st.session_state["_focus_warm_pending"] = tk
+
     with st.container(border=True, key=f"ppxcard_t{tier or 0}_{key}"):
-        st.markdown(_card_body(row, spark, price, chg, ef=ef, focus=focus),
+        st.markdown(_card_body(row, spark, price, chg, ef=ef, focus=focus,
+                               pr=pr, closes=closes),
                     unsafe_allow_html=True)
         st.markdown("<hr class='pp-divider'/>", unsafe_allow_html=True)
-        f0, f1, f2 = st.columns([6, 1, 1], vertical_alignment="center")
-        with f0:
-            if tier in (1, 2) and entry and stop:
-                if st.button("📋 Trade", key=f"ppxtrade{tier}_{key}",
-                             type="primary" if tier == 1 else "secondary"):
+        if focus:
+            # mockup footer: Trade setup / Chart / Alert, docked under the card.
+            f0, f1, f2, f3 = st.columns([4, 2.4, 2, 1], vertical_alignment="center")
+            with f0:
+                if entry and stop and st.button("📈 Trade setup", key=f"ppxtrade_focus_{key}",
+                                                type="primary", use_container_width=True):
                     st.session_state["active_trade"] = c._build_active_trade(row, price)
                     st.switch_page("views/position_sizer.py")
-        with f1:
-            c.star_button(tk, key=f"ppxrow_{key}")
-        with f2:
-            if st.button("∨" if not is_open else "∧", key=f"ppxexp_{key}", help="Details"):
-                (open_set.discard if is_open else open_set.add)(tk)
-                st.rerun()
-        if is_open:
-            pr = detail_fn(tk)
-            if pr is not None:
-                c.render_detail_inline(pr)
+            with f1:
+                st.link_button("📊 Chart", c.tradingview_url(tk), use_container_width=True)
+            with f2:
+                if st.button("🔔 Alert", key=f"ppxalert_focus_{key}", use_container_width=True):
+                    st.toast("Alerts arrive in a later phase", icon="🔔")
+            with f3:
+                c.star_button(tk, key=f"ppxrow_{key}")
+        else:
+            f0, f1, f2 = st.columns([6, 1, 1], vertical_alignment="center")
+            with f0:
+                if tier in (1, 2) and entry and stop:
+                    if st.button("📋 Trade", key=f"ppxtrade{tier}_{key}",
+                                 type="primary" if tier == 1 else "secondary"):
+                        st.session_state["active_trade"] = c._build_active_trade(row, price)
+                        st.switch_page("views/position_sizer.py")
+            with f1:
+                c.star_button(tk, key=f"ppxrow_{key}")
+            with f2:
+                if st.button("∨" if not is_open else "∧", key=f"ppxexp_{key}", help="Details"):
+                    (open_set.discard if is_open else open_set.add)(tk)
+                    st.rerun()
+            if is_open:
+                pr_open = detail_fn(tk)
+                if pr_open is not None:
+                    c.render_detail_inline(pr_open)
+
+    # Deferred warm-up for the focus card: the card has now painted (chart-first);
+    # fetch the analyzer detail once, cache it, and rerun so the ATR/tags/checklist
+    # band fills in on the next beat without blocking first paint.
+    if focus and st.session_state.get("_focus_warm_pending") == tk:
+        st.session_state.pop("_focus_warm_pending", None)
+        try:
+            warmed = st.session_state.setdefault("_focus_detail", {})
+            warmed[tk] = detail_fn(tk)
+            st.rerun()
+        except Exception:  # noqa: BLE001 — never let warm-up break the page
+            st.session_state.setdefault("_focus_detail", {})[tk] = None
