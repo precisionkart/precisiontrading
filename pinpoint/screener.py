@@ -17,6 +17,7 @@ existing scoring/pattern/RS code consumes it unchanged.
 from __future__ import annotations
 
 import logging
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -41,13 +42,87 @@ def _empty_universe() -> pd.DataFrame:
     return pd.DataFrame(columns=NORMALIZED_COLUMNS)
 
 
+def _etf_exclusions() -> set:
+    """Index/sector/theme ETFs we cache for regime & ranking but must NOT treat
+    as scannable stocks in the weekend cache path."""
+    ex = set(CONFIG.regime.benchmarks) | {"SPY", "QQQ", "IWM", "DIA"}
+    try:
+        from .config import THEME_ETFS
+        from .themes import SECTOR_ETFS
+        for v in THEME_ETFS.values():
+            ex |= set(v)
+        ex |= set(SECTOR_ETFS.values())
+    except Exception:  # noqa: BLE001
+        pass
+    return ex
+
+
+def _cached_tickers() -> list[str]:
+    """Tickers with a committed daily OHLCV cache (data/ohlcv/<t>_1d.parquet)."""
+    import glob
+    cache_dir = ohlcv_mod._cache_dir()
+    out = []
+    for path in glob.glob(os.path.join(cache_dir, "*_1d.parquet")):
+        stem = os.path.basename(path)[:-len("_1d.parquet")]
+        if stem:
+            out.append(stem.upper())
+    return sorted(set(out))
+
+
+def _build_universe_from_cache(min_price: float, min_avg_volume: int) -> pd.DataFrame:
+    """Weekend / market-closed path: build the universe from the OHLCV cache
+    (Friday's actual close), with NO live API calls. Price/volume/rel_volume come
+    from the last cached bar + 20-day average; technicals are filled by
+    enrich_with_ohlcv (also cache-only)."""
+    exclude = _etf_exclusions()
+    tickers = [t for t in _cached_tickers() if t not in exclude]
+    rows = []
+    for tk in tickers:
+        res = ohlcv_mod.fetch_daily(tk, cache_only=True)
+        if res.empty or len(res.df) < 20:
+            continue
+        d = res.df
+        price = float(d["Close"].iloc[-1])
+        last_vol = float(d["Volume"].iloc[-1])
+        avg20 = float(d["Volume"].iloc[-20:].mean())
+        if not (price == price and price > min_price):
+            continue
+        if not (avg20 == avg20 and avg20 >= min_avg_volume):
+            continue
+        rows.append({
+            "ticker": tk, "price": price,
+            "avg_volume": avg20, "volume": last_vol,
+            "rel_volume": round(last_vol / avg20, 2) if avg20 else np.nan,
+            "gap": np.nan, "change": np.nan,        # no live snapshot off-hours
+            "company": np.nan, "sector": np.nan, "industry": np.nan,
+            "beta": np.nan, "atr": np.nan, "rsi": np.nan,
+            "sma20_pct": np.nan, "sma50_pct": np.nan, "sma200_pct": np.nan,
+            "pct_below_high": np.nan, "perf_week": np.nan, "perf_month": np.nan,
+            "perf_quarter": np.nan, "perf_half": np.nan, "perf_year": np.nan,
+            "market_cap": np.nan, "eps_this_y": np.nan, "eps_past5y": np.nan,
+            "sales_past5y": np.nan,
+        })
+    df = pd.DataFrame(rows, columns=None if rows else NORMALIZED_COLUMNS + ["volume"])
+    logger.info("build_universe_df (CACHE/weekend): %d names from %d cached tickers "
+                "(price>$%.0f & 20d-avg-vol>=%s)", len(df), len(tickers),
+                min_price, f"{min_avg_volume:,}")
+    return df
+
+
 def build_universe_df(client, min_price: float = 10.0,
                       min_avg_volume: int = 300_000) -> pd.DataFrame:
     """All active US stocks -> batch snapshots -> price/volume filter.
 
     Per-ticker fields that need OHLCV or reference calls (perf_*, sma*_pct, EPS/
     Sales, sector/industry/company, beta, pct_below_high) are left as NaN here
-    and filled by enrich_with_ohlcv / enrich_with_fundamentals."""
+    and filled by enrich_with_ohlcv / enrich_with_fundamentals.
+
+    When the market is CLOSED, skip live snapshots entirely and build from the
+    OHLCV cache (Friday's EOD close) — faster and cleaner than stale snapshots."""
+    from .config import market_is_open
+    if not market_is_open():
+        return _build_universe_from_cache(min_price, min_avg_volume)
+
     tickers = client.get_universe(min_price=min_price, min_avg_volume=min_avg_volume)
     if not tickers:
         logger.warning("Massive universe returned no tickers")
@@ -133,12 +208,14 @@ def enrich_with_ohlcv(universe_df: pd.DataFrame, client,
     technical columns (SMA%/perf/ATR/RVOL/pct_below_high/avg_volume)."""
     if universe_df is None or len(universe_df) == 0:
         return _empty_universe()
+    from .config import market_is_open
+    cache_only = not market_is_open()        # weekend: pure cache reads, no API
     df = universe_df.sort_values("volume", ascending=False).head(top_n).copy()
     df = df.reset_index(drop=True)
     tickers = list(df["ticker"])
 
     def _one(tk):
-        res = ohlcv_mod.fetch_daily(tk)
+        res = ohlcv_mod.fetch_daily(tk, cache_only=cache_only)
         if res.empty or len(res.df) < 30:
             return tk, None
         try:

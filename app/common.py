@@ -257,7 +257,7 @@ def weekend_banner() -> None:
     if market_is_open() and not st.session_state.get("weekend_mode"):
         return
     st.markdown(
-        "<div class='pp-weekend'>📅 Weekend scan — RVOL gate relaxed. "
+        "<div class='pp-weekend'>📅 Weekend scan — using Friday's close data. "
         "Setups valid at Monday open.</div>", unsafe_allow_html=True)
 
 
