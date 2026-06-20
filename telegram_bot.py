@@ -85,6 +85,42 @@ def _account_settings() -> tuple:
     return float(account), float(risk)
 
 
+# ── Signal verdict ─────────────────────────────────────────
+_STRONG_PATTERNS = ("high_tight_flag", "flat_base", "flag", "earnings_flag")
+_STAGE_WORD = {1: "Basing", 2: "Advancing", 3: "Topping", 4: "Declining"}
+
+
+def get_signal(stage, pat, setup) -> str:
+    """One-line trade verdict for the top of an analysis."""
+    if not stage.is_stage2:
+        if stage.stage in (3, 4):
+            return "🚫 BAD TRADE"
+        return "👀 KEEP WATCHING"
+    if pat is None:
+        return "👀 KEEP WATCHING"
+    if setup is None or not setup.rr_ok:
+        return "👀 KEEP WATCHING"
+    if (pat.name in _STRONG_PATTERNS and setup.reward_risk >= 6.0
+            and pat.confidence >= 0.75):
+        return "🚀 GREAT TRADE — LOOK TO ENTER"
+    if setup.reward_risk >= 5.0:
+        return "✅ GOOD SETUP"
+    return "👀 KEEP WATCHING"
+
+
+def _company_name(ticker: str) -> str:
+    try:
+        from pinpoint.massive_client import MassiveClient
+        name = MassiveClient().get_ticker_details(ticker).get("company") or ""
+        for suffix in (" Common Stock", " Class A Common Stock", " Class A Ordinary Shares",
+                       " Ordinary Shares", ", Inc.", " Inc."):
+            if name.endswith(suffix):
+                name = name[: -len(suffix)] + (" Inc" if "Inc" in suffix else "")
+        return name.strip().rstrip(",")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 # ── Pinpoint analysis ──────────────────────────────────────
 def analyse_ticker(ticker: str) -> str:
     ticker = ticker.upper().strip()
@@ -108,10 +144,10 @@ def analyse_ticker(ticker: str) -> str:
         sma200 = float(last.get("SMA200", 0)) if "SMA200" in df.columns else 0
         sma50 = float(last.get("SMA50", 0)) if "SMA50" in df.columns else 0
         ema20 = float(last.get("EMA20", 0)) if "EMA20" in df.columns else 0
-        sma200_pct = (price - sma200) / sma200 * 100 if sma200 else 0
-        sma50_pct = (price - sma50) / sma50 * 100 if sma50 else 0
-        sma20_pct = (price - ema20) / ema20 * 100 if ema20 else 0
-        stage = stage_mod.classify_from_sma(sma20_pct, sma50_pct, sma200_pct)
+        stage = stage_mod.classify_from_sma(
+            (price - ema20) / ema20 * 100 if ema20 else 0,
+            (price - sma50) / sma50 * 100 if sma50 else 0,
+            (price - sma200) / sma200 * 100 if sma200 else 0)
 
         pat = patterns_mod.best_pattern(df, require_measured=True)
         setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target) if pat else None
@@ -122,57 +158,82 @@ def analyse_ticker(ticker: str) -> str:
         avg_vol = float(df["Volume"].tail(20).mean())
         rvol = float(df["Volume"].iloc[-1]) / avg_vol if avg_vol > 0 else 1.0
         adr = float(((df["High"] - df["Low"]) / df["Close"]).tail(14).mean() * 100)
-        account_size, risk_pct = _account_settings()
 
-        arrow = "🟢" if change_pct >= 0 else "🔴"
-        lines = [f"📊 *{ticker}*\n${price:.2f} {change_emoji}{abs(change_pct):.2f}%  {arrow}", "",
-                 f"*Stage:* {stage.label}"]
-        ma_lines = []
+        signal = get_signal(stage, pat, setup)
+        company = _company_name(ticker)
+        sig_dot = ("🟢" if signal.startswith(("🚀", "✅")) else
+                   "🔴" if signal.startswith("🚫") else "🟡")
+
+        lines = [signal, "", "━━━━━━━━━━━━━━━━━━━━━━",
+                 f"📊 *{ticker}*" + (f" — {company}" if company else ""),
+                 "━━━━━━━━━━━━━━━━━━━━━━",
+                 f"${price:.2f}  {change_emoji} {abs(change_pct):.2f}%  {sig_dot}", ""]
+
+        # Stage
+        stword = _STAGE_WORD.get(stage.stage, stage.label)
+        if stage.is_stage2:
+            lines += [f"✅ *Stage 2 — {stword}*", "Above rising 200 SMA", ""]
+        elif stage.stage == 4:
+            lines += [f"❌ *Stage 4 — {stword}*", "Avoid — below falling 200 SMA", ""]
+        elif stage.stage == 3:
+            lines += [f"⚠️ *Stage 3 — {stword}*", "Topping — distribution risk", ""]
+        else:
+            lines += [f"👀 *Stage {stage.stage} — {stword}*", "Basing — needs a breakout", ""]
+
+        # Moving averages
+        lines.append("📈 *MOVING AVERAGES*")
         if sma200 > 0:
-            ma_lines.append(f"{'✅' if price > sma200 else '❌'} 200 SMA ${sma200:.2f}")
+            lines.append(f"200 SMA  ${sma200:.2f}  {'✅ above' if price > sma200 else '❌ below'}")
         if sma50 > 0:
-            ma_lines.append(f"{'✅' if price > sma50 else '❌'} 50 SMA ${sma50:.2f}")
+            lines.append(f"50 SMA   ${sma50:.2f}  {'✅ above' if price > sma50 else '❌ below'}")
         if ema20 > 0:
-            ma_lines.append(f"{'✅' if price > ema20 else '⚠️'} 20 EMA ${ema20:.2f}")
-        if ma_lines:
-            lines.append("*MAs:* " + "  ·  ".join(ma_lines))
-        lines += ["", f"*52W:* High ${high_52w:.2f} · Low ${low_52w:.2f}\n"
-                      f"       {pct_from_high:.1f}% from high",
-                  f"*RVOL:* {rvol:.2f}x  ·  *ADR:* {adr:.1f}%", ""]
+            lines.append(f"20 EMA   ${ema20:.2f}  {'✅ above' if price > ema20 else '⚠️ below'}")
+        lines.append("")
 
+        # 52-week range
+        lines += ["📉 *52-WEEK RANGE*", f"High  ${high_52w:.2f}", f"Low   ${low_52w:.2f}",
+                  f"Now   ${price:.2f}  ({pct_from_high:.1f}% from high)", ""]
+
+        # Stats
+        lines += ["📊 *STATS*", f"RVOL  {rvol:.2f}x{'  🔥' if rvol >= 1.5 else ''}",
+                  f"ADR   {adr:.1f}%", ""]
+
+        # Pattern
+        lines.append("🔍 *PATTERN*")
         if pat:
             bar = "█" * int(pat.confidence * 10) + "░" * (10 - int(pat.confidence * 10))
-            lines.append(f"*Pattern:* {pat.label}\nConfidence: {bar} {pat.confidence:.0%}")
+            lines += [pat.label, f"Confidence  {bar}  {pat.confidence:.0%}", ""]
         else:
-            lines.append("*Pattern:* None detected")
-        lines.append("")
+            lines += ["None detected", ""]
 
+        # Setup
+        lines.append("📐 *SETUP*")
         if setup and setup.rr_ok:
-            dollar_risk = account_size * (risk_pct / 100)
-            risk_ps = setup.entry - setup.stop
-            shares = int(dollar_risk / risk_ps) if risk_ps > 0 else 0
-            lines += ["*Setup:*",
-                      f"E `${setup.entry:.2f}` · X `${setup.stop:.2f}` · T `${setup.measured_target:.2f}`",
-                      f"R:R {setup.reward_risk:.1f}:1 ✅  ·  {shares} sh  ·  ${dollar_risk:,.0f} risk",
-                      f"Stop type: {setup.stop_kind} (.89 rule)"]
+            lines += [f"Entry   ${setup.entry:.2f}",
+                      f"Stop    ${setup.stop:.2f}  ({setup.stop_kind} .89 rule)",
+                      f"Target  ${setup.measured_target:.2f}",
+                      f"R:R     {setup.reward_risk:.1f}:1  ✅", ""]
         elif setup:
-            lines += [f"*Setup:* R:R {setup.reward_risk:.1f}:1 ⚠️ (below 5:1 minimum)",
-                      f"E `${setup.entry:.2f}` · X `${setup.stop:.2f}`"]
+            lines += [f"Entry   ${setup.entry:.2f}",
+                      f"Stop    ${setup.stop:.2f}  ({setup.stop_kind} .89 rule)",
+                      f"R:R     {setup.reward_risk:.1f}:1  ⚠️ below 5:1", ""]
+        elif not stage.is_stage2:
+            lines += ["No valid setup — not Stage 2", ""]
         else:
-            lines.append("*Setup:* No measured pattern — enter levels manually")
-        lines.append("")
+            lines += ["No measured pattern yet", ""]
 
-        if not stage.is_stage2:
-            verdict = f"⚠️ *WATCHLIST* — {stage.label}, not Stage 2"
-        elif pat and setup and setup.rr_ok:
-            verdict = "✅ *VALID SETUP* — meets Pinpoint criteria"
-        elif pat and setup:
-            verdict = "⚠️ *WATCHLIST* — pattern found but R:R below 5:1"
-        elif pat:
-            verdict = "⚠️ *WATCHLIST* — pattern found, no measured target"
+        # Verdict box (text mirrors the signal)
+        if signal.startswith("🚀"):
+            vt = ["🚀 *GREAT TRADE*", "Strong pattern, high R:R — look to enter"]
+        elif signal.startswith("✅"):
+            vt = ["✅ *VALID SETUP*", "Meets all Pinpoint criteria"]
+        elif signal.startswith("🚫"):
+            vt = ["🚫 *BAD TRADE*", f"Stage {stage.stage} {stword.lower()} — avoid new longs"]
         else:
-            verdict = "❌ *NO SETUP* — no valid pattern detected"
-        lines.append(verdict)
+            vt = ["👀 *KEEP WATCHING*",
+                  "Not Stage 2" if not stage.is_stage2 else
+                  "No pattern yet" if pat is None else "R:R below 5:1"]
+        lines += ["─────────────────────"] + vt + ["─────────────────────"]
         return "\n".join(lines)
     except Exception as e:  # noqa: BLE001
         log.error("analyse_ticker(%s) error: %s", ticker, e)
@@ -214,28 +275,31 @@ def compare_tickers(t1: str, t2: str) -> str:
 
 
 def custom_position_size(ticker: str, entry: float, stop: float) -> str:
-    account_size, risk_pct = _account_settings()
+    """Levels + R-targets for a custom entry/stop (no position sizing)."""
     risk_per_share = entry - stop
     if risk_per_share <= 0:
         return "❌ Stop must be below entry price."
-    dollar_risk = account_size * (risk_pct / 100)
-    shares = int(dollar_risk / risk_per_share)
-    position_value = shares * entry
-    target_3r = entry + risk_per_share * 3
-    target_5r = entry + risk_per_share * 5
     try:
         from pinpoint.entries import liquidity_stop
         sr = liquidity_stop(stop)
-        stop_display = f"${sr.stop:.2f} ({sr.cluster_kind} .89 rule)"
+        stop_display = f"${sr.stop:.2f}  ({sr.cluster_kind} .89 rule)"
     except Exception:  # noqa: BLE001
         stop_display = f"${stop:.2f}"
-    return (f"📐 *{ticker} Position Size*\n\n"
-            f"Account: ${account_size:,.0f} · Risk: {risk_pct}%\n\n"
-            f"Entry:    `${entry:.2f}`\nStop:     `{stop_display}`\n"
-            f"Risk/sh:  `${risk_per_share:.2f}`\n$ at risk: `${dollar_risk:,.0f}`\n"
-            f"*Shares:   {shares}*\nPosition: `${position_value:,.0f}`\n\n"
-            f"3R target: `${target_3r:.2f}`\n5R target: `${target_5r:.2f}` ← PDF target\n\n"
-            f"_Trail on 10 EMA daily close_")
+    t = {n: entry + risk_per_share * n for n in (1, 3, 5, 10)}
+    return (f"━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📐 *{ticker} — Levels*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"Entry   `${entry:.2f}`\n"
+            f"Stop    `{stop_display}`\n"
+            f"Risk/sh `${risk_per_share:.2f}`\n\n"
+            f"📊 *TARGETS*\n"
+            f"1R  `${t[1]:.2f}`\n"
+            f"3R  `${t[3]:.2f}`  ← trim 20% here\n"
+            f"5R  `${t[5]:.2f}`  ← PDF target\n"
+            f"10R `${t[10]:.2f}`\n\n"
+            f"─────────────────────\n"
+            f"_Trail on 10 EMA daily close_\n"
+            f"─────────────────────")
 
 
 def cmd_regime() -> str:
@@ -317,10 +381,15 @@ def cmd_positions() -> str:
 
 def cmd_help() -> str:
     return ("📍 *Pinpoint Bot Commands*\n\n"
-            "`$AAPL` — Full analysis\n`$AAPL vs $NVDA` — Compare two stocks\n"
-            "`$AAPL entry 295 stop 280` — Position size\n\n"
+            "`$AAPL` — Full analysis + signal\n`$AAPL vs $NVDA` — Compare two stocks\n"
+            "`$AAPL entry 295 stop 280` — Levels + targets\n\n"
             "`/regime` — Market regime (SPY/QQQ)\n`/watchlist` — Today's top setups\n"
             "`/positions` — Open positions + P&L\n`/help` — This message\n\n"
+            "*Signals:*\n"
+            "🚀 GREAT TRADE — strong pattern, R:R ≥ 6, look to enter\n"
+            "✅ GOOD SETUP — meets the 5:1 minimum\n"
+            "👀 KEEP WATCHING — not ready (stage / pattern / R:R)\n"
+            "🚫 BAD TRADE — Stage 3/4, avoid new longs\n\n"
             "_All analysis uses Friday's close on weekends._")
 
 
