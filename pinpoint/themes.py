@@ -25,9 +25,25 @@ import numpy as np
 import pandas as pd
 
 from .config import CONFIG, THEME_ETFS, HOT_THEME_TOP_FRAC, TOP_INDUSTRY_FRAC
-from .finviz_client import COLUMN_CANDIDATES, get_col
 from . import ohlcv as ohlcv_mod
 from .rs_rating import weighted_return
+
+# Broad SPDR sector ETF per Finviz-style sector name — the OHLCV proxy used to
+# rank sector "groups" now that Finviz's industry group screener is gone. The
+# stock's mapped sector resolves to one of these for the top-group RS check.
+SECTOR_ETFS: dict[str, str] = {
+    "Technology": "XLK",
+    "Financial Services": "XLF",
+    "Healthcare": "XLV",
+    "Consumer Cyclical": "XLY",
+    "Consumer Defensive": "XLP",
+    "Energy": "XLE",
+    "Industrials": "XLI",
+    "Basic Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Utilities": "XLU",
+    "Communication Services": "XLC",
+}
 
 logger = logging.getLogger("pinpoint.themes")
 
@@ -161,34 +177,35 @@ def rank_themes(ohlcv_provider=None) -> tuple[dict[str, dict], list[str]]:
     return theme_rank, warnings
 
 
-def rank_industries(client=None) -> tuple[dict[str, dict], list[str]]:
-    """Rank Finviz industries by RS proxy via the group performance screener."""
-    warnings: list[str] = []
-    try:
-        from finvizfinance.group.performance import Performance as GroupPerf
-        gp = GroupPerf()
-        df = gp.screener_view(group="Industry")
-    except Exception as exc:  # noqa: BLE001
-        return {}, [f"industry group fetch failed: {exc}"]
-    if df is None or len(df) == 0:
-        return {}, ["industry group returned no rows"]
+def rank_industries(client=None, ohlcv_provider=None) -> tuple[dict[str, dict], list[str]]:
+    """Rank the broad SPDR SECTOR ETFs by RS proxy from OHLCV, keyed by Finviz
+    sector name (Task 4 — Massive has no industry-group screener).
 
-    name = get_col(df, ["Name", "Industry"])
-    perf = pd.DataFrame({
-        "perf_month": get_col(df, COLUMN_CANDIDATES["perf_month"], pct=True, expect_fraction=True),
-        "perf_quarter": get_col(df, COLUMN_CANDIDATES["perf_quarter"], pct=True, expect_fraction=True),
-        "perf_half": get_col(df, COLUMN_CANDIDATES["perf_half"], pct=True, expect_fraction=True),
-        "perf_year": get_col(df, COLUMN_CANDIDATES["perf_year"], pct=True, expect_fraction=True),
-    })
-    wr = weighted_return(perf)
-    valid = wr.dropna()
-    if len(valid) < 2:
-        return {}, ["insufficient industry performance data"]
-    pct = valid.rank(pct=True)
-    order = valid.rank(ascending=False, method="min").astype(int)
-    industry_rank = {str(name.iloc[i]).strip(): {"pct": float(pct.iloc[k]),
-                                                  "rank": int(order.iloc[k]), "score": round(valid.iloc[k], 2)}
-                     for k, i in enumerate(valid.index)}
+    The returned dict is keyed by SECTOR; the stock's mapped sector resolves to
+    its rank for the top-group RS gate. `client` is ignored (kept for call-site
+    compatibility)."""
+    if ohlcv_provider is None:
+        def ohlcv_provider(t):
+            return ohlcv_mod.fetch_daily(t).df
+
+    warnings: list[str] = []
+    scores: dict[str, float] = {}
+    for sector, etf in SECTOR_ETFS.items():
+        daily = ohlcv_provider(etf)
+        if daily is None or len(daily) < 30:
+            warnings.append(f"no OHLCV for sector ETF {etf} ({sector})")
+            continue
+        perf = pd.DataFrame([_trailing_perf(daily["Close"])])
+        wr = weighted_return(perf).iloc[0]
+        if wr == wr:
+            scores[sector] = float(wr)
+    if len(scores) < 2:
+        return {}, warnings + ["insufficient sector ETF performance data"]
+    s = pd.Series(scores)
+    pct = s.rank(pct=True)
+    order = s.rank(ascending=False, method="min").astype(int)
+    industry_rank = {sec: {"pct": float(pct[sec]), "rank": int(order[sec]),
+                           "score": round(s[sec], 2)} for sec in s.index}
     return industry_rank, warnings
 
 

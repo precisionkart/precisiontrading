@@ -118,14 +118,16 @@ def test_build_targets_industry_gate():
                 sma50_pct=9.0, sma200_pct=22.0, eps_this_y=50.0, eps_past5y=30.0,
                 sales_past5y=30.0, rs=95.0,
                 perf_week=1.0, perf_month=8.0, perf_quarter=20.0, perf_half=40.0, perf_year=80.0)
-    uni = pd.DataFrame([dict(base, ticker="HOT", industry="Software"),
-                        dict(base, ticker="COLD", industry="Coal")])
+    # Top-group RS is now SECTOR-keyed (Massive migration): HOT's sector is a
+    # top-decile group, COLD's is not, so COLD is gated out.
+    uni = pd.DataFrame([dict(base, ticker="HOT", sector="Technology", industry="Software"),
+                        dict(base, ticker="COLD", sector="Energy", industry="Coal")])
     ctx = ThemeContext(theme_rank={}, n_themes=0,
-                       industry_rank={"Software": {"pct": 0.99, "rank": 1, "score": 40.0},
-                                      "Coal": {"pct": 0.20, "rank": 120, "score": 1.0}})
+                       industry_rank={"Technology": {"pct": 0.99, "rank": 1, "score": 40.0},
+                                      "Energy": {"pct": 0.20, "rank": 120, "score": 1.0}})
 
     gated = pipeline.build_targets(uni, reg, save_snapshot=False, theme_ctx=ctx)
-    assert set(gated["ticker"]) == {"HOT"}          # Coal industry gated out
+    assert set(gated["ticker"]) == {"HOT"}          # Energy sector gated out
     ungated = pipeline.build_targets(uni, reg, save_snapshot=False, theme_ctx=ctx,
                                      no_industry_gate=True)
     assert set(ungated["ticker"]) == {"HOT", "COLD"}
@@ -142,33 +144,23 @@ def test_build_earnings_down_avoid_list():
     assert up.isdisjoint(set(down["ticker"]))
 
 
-def test_rs_reference_screen_imported_and_used():
-    """Regression (Phase 9 6/7): RS_REFERENCE_SCREEN must be importable in the
-    pipeline namespace AND _inject_broad_rs must actively use the broad reference
-    — not silently NameError into the local-RS fallback."""
-    from pinpoint.config import RS_REFERENCE_SCREEN as CFG_SCREEN
-    # 1) importable in the pipeline module namespace (the regression).
-    assert getattr(pipeline, "RS_REFERENCE_SCREEN", None) == CFG_SCREEN
-
-    # 2) actively used: a fake client returns a broad reference; rs is remapped
-    # from the broad percentile and NO fallback warning is appended.
-    class _Res:
-        def __init__(self, df):
-            self.df = df; self.warnings = []; self.empty = len(df) == 0
-
+def test_inject_broad_rs_computes_over_universe():
+    """Post-Massive: the screener already returns the broad leader universe, so
+    _inject_broad_rs ranks RS across it directly — NO separate client fetch, and
+    no fallback warning. (Replaces the old RS_REFERENCE_SCREEN fetch regression.)"""
     class _Client:
-        def __init__(self, ref):
-            self.ref = ref; self.screens = []
-        def fetch_universe(self, screen, views=None):
-            self.screens.append(screen); return _Res(self.ref)
+        def __init__(self):
+            self.fetched = False
+        def fetch_universe(self, *a, **k):          # must NOT be called now
+            self.fetched = True
+            raise AssertionError("_inject_broad_rs should not fetch on Massive")
 
-    broad_raw = sample_data.universe_df()                  # normalizes to perf cols
-    universe = pipeline.normalize_universe(broad_raw)
-    client = _Client(broad_raw)
-    warnings = []
+    universe = pipeline.normalize_universe(sample_data.universe_df())
+    client = _Client()
+    warnings: list = []
     out = pipeline._inject_broad_rs(client, universe, warnings)
 
-    assert client.screens == [CFG_SCREEN]                  # the broad screen was pulled
-    assert not any("RS_REFERENCE_SCREEN" in w or "broad RS reference fetch failed" in w
-                   for w in warnings)                      # no NameError fallback
-    assert out["rs"].notna().any()                         # broad RS actually set
+    assert client.fetched is False                          # no separate pull
+    assert not warnings                                     # clean RS computation
+    assert out["rs"].notna().any()                          # RS actually set
+    assert ((out["rs"].dropna() >= 0) & (out["rs"].dropna() <= 100)).all()

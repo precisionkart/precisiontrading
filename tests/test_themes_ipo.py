@@ -67,7 +67,15 @@ def test_snapshot_layers_theme_and_ipo():
     row = pd.Series({"ticker": "NVDA", "sector": "Technology", "industry": "Semiconductors",
                      "sma20_pct": 2.0, "sma50_pct": 9.0, "sma200_pct": 22.0,
                      "rel_volume": 3.0, "eps_this_y": 50.0})
-    layers = pipeline.snapshot_layers(row, reg, 99.0, theme_ctx=_ctx(),
+    # top-group RS is now SECTOR-keyed (Massive has no industry-group screener),
+    # so the ctx ranks the stock's sector "Technology" in the top decile.
+    ctx = ThemeContext(
+        theme_rank={"Semiconductors": {"rank": 1, "pct": 1.0, "score": 30.0},
+                    "Technology": {"rank": 2, "pct": 0.8, "score": 20.0}},
+        industry_rank={"Technology": {"rank": 1, "pct": 0.99, "score": 40.0},
+                       "Energy": {"rank": 9, "pct": 0.2, "score": 2.0}},
+        n_themes=2, n_industries=2)
+    layers = pipeline.snapshot_layers(row, reg, 99.0, theme_ctx=ctx,
                                       ipo_ctx={"NVDA": True})
     assert layers["hot_theme"]
     assert layers["top_industry_group"]

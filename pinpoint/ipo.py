@@ -144,6 +144,15 @@ def build_ipo_watchlist(client, limit: int = 40, ohlcv_provider=None) -> IpoResu
         def ohlcv_provider(t):
             return ohlcv_mod.fetch_daily(t, period="2y").df
 
+    # The IPO-date screener was Finviz-only; Massive has no equivalent, and
+    # walking every ticker's list_date is too costly per scan. When the client
+    # can't screen by IPO date we degrade gracefully (no IPO list / ipo_edge),
+    # which the rest of the pipeline tolerates (the layer simply doesn't fire).
+    if not hasattr(client, "fetch_universe"):
+        return IpoResult(watchlist=pd.DataFrame(),
+                         warnings=["IPO list unavailable on Massive "
+                                   "(no IPO-date screener); ipo_edge layer off"])
+
     screen = {"IPO Date": CONFIG.ipo.max_age_label, "Price": "Over $10",
               "Average Volume": "Over 300K"}
     res = client.fetch_universe(screen, views=("overview",))

@@ -27,6 +27,7 @@ from .config import (CONFIG, TARGETS_SCREEN, EARNINGS_SCREEN_YESTERDAY,
                      EARNINGS_SCREEN_TODAY, FINVIZ_SORT_QUARTER, GROWTH_FILTERS,
                      RS_REFERENCE_SCREEN)
 from .finviz_client import COLUMN_CANDIDATES, get_col, to_num, to_pct
+from . import screener as screener_mod
 from . import fundamentals as fundamentals_mod
 from . import stage_trend as stage_mod
 from . import ohlcv as ohlcv_mod
@@ -112,6 +113,19 @@ def normalize_universe(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _ensure_normalized(df: pd.DataFrame) -> pd.DataFrame:
+    """Accept either an already-normalized frame (lowercase 'ticker') or a raw
+    Finviz-shaped frame ('Ticker'/'Symbol') and return the normalized form. Lets
+    build_earnings* take either shape (selftest fixtures + back-compat tests)."""
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
+    if "ticker" in df.columns:
+        return df
+    if "Ticker" in df.columns or "Symbol" in df.columns:
+        return normalize_universe(df)
+    return df
+
+
 # ---------------------------------------------------------------------------
 # Hard gates (3.3) — every row gets a pass/fail per gate (for the analyzer too).
 # ---------------------------------------------------------------------------
@@ -174,7 +188,8 @@ def snapshot_layers(row: pd.Series, regime: Regime, rs: float,
     sector = row.get("sector")
     industry = row.get("industry")
     hot_theme = bool(theme_ctx and theme_ctx.is_hot_theme(sector, industry))
-    top_industry = bool(theme_ctx and theme_ctx.is_top_industry(industry))
+    # Top-group RS is now sector-level (Massive has no industry-group screener).
+    top_industry = bool(theme_ctx and theme_ctx.is_top_industry(sector))
     ipo_edge = bool(ipo_ctx and ipo_ctx.get(row.get("ticker")))
 
     return {
@@ -245,7 +260,7 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
         # cloud path reads already-gated published targets.
         if (theme_ctx is not None and getattr(theme_ctx, "industry_rank", None)
                 and not no_industry_gate
-                and not theme_ctx.is_top_industry(row.get("industry"))):
+                and not theme_ctx.is_top_industry(row.get("sector"))):
             continue
         layers = snapshot_layers(row, regime, rs, theme_ctx=theme_ctx, ipo_ctx=ipo_ctx)
         result = score_layers(layers)
@@ -288,24 +303,43 @@ def build_targets(universe: pd.DataFrame, regime: Regime,
 # ---------------------------------------------------------------------------
 # build_earnings  (gap-UP only)
 # ---------------------------------------------------------------------------
-def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
-    """Earnings-reaction list (3.3 / Section 7). Bull-trap fix: a name must have
-    gapped up AND closed up AND held >= half the opening gap (gap>0, change>0,
-    change>=gap*0.5) — gap-and-trap distribution is excluded. Surviving names are
+def _reported_recently(filing_date, within_days: int = 4) -> bool:
+    """True if `filing_date` (ISO 'YYYY-MM-DD') is within the last `within_days`
+    calendar days — our Massive proxy for 'reported just now' since Polygon has no
+    earnings-date screener. A few days' window absorbs filing-vs-report lag."""
+    if not filing_date:
+        return False
+    try:
+        fd = date.fromisoformat(str(filing_date)[:10])
+    except ValueError:
+        return False
+    return 0 <= (date.today() - fd).days <= within_days
+
+
+def build_earnings(universe: pd.DataFrame, persist: bool = True,
+                   within_days: int = 4) -> pd.DataFrame:
+    """Earnings-reaction list (3.3 / Section 7) off a NORMALIZED universe.
+
+    A name qualifies if it reported within the last few days (latest_filing_date)
+    AND its reaction passes the bull-trap fix: gapped up AND closed up AND held
+    >= half the opening gap (gap>0, change>0, change>=gap*0.5). Survivors are
     persisted to earnings_watch.json so a flag breakout 1-4 weeks later becomes a
     first-class Focus scoring path. Ranked by RS proxy."""
     from . import earnings_watch as ew
 
-    universe = normalize_universe(raw)
+    if universe is None or len(universe) == 0:
+        return pd.DataFrame()
+    universe = _ensure_normalized(universe)
     if len(universe) == 0:
         return pd.DataFrame()
+    universe = universe.copy()
+    if "rs" not in universe.columns or universe["rs"].isna().all():
+        perf = universe[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
+                         if c in universe.columns]]
+        universe["rs"] = compute_rs(perf) if len(perf.columns) else np.nan
+    has_filing = "latest_filing_date" in universe.columns
 
     g = CONFIG.gates
-    perf = universe[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
-                     if c in universe.columns]]
-    universe = universe.copy()
-    universe["rs"] = compute_rs(perf) if len(perf.columns) else np.nan
-
     rows = []
     for _, row in universe.iterrows():
         price = row.get("price", np.nan)
@@ -316,6 +350,8 @@ def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
             continue
         if not (avgv >= g.min_avg_volume):
             continue
+        if has_filing and not _reported_recently(row.get("latest_filing_date"), within_days):
+            continue                                  # only names that just reported
         if not ew.passes_gap_filter(gap, change):     # gap-up + held (no bull trap)
             continue
         rows.append({
@@ -347,24 +383,30 @@ def build_earnings(raw: pd.DataFrame, persist: bool = True) -> pd.DataFrame:
     return out
 
 
-def build_earnings_down(raw: pd.DataFrame) -> pd.DataFrame:
-    """Earnings gap-DOWN list (Phase 10 step 8) — names that gapped down AND
-    closed down on their report. These are AVOID signals (broken support /
-    distribution), NOT trade candidates: surfaced so the user can steer clear and
-    spot sympathy weakness. Ranked most-negative gap first. Not persisted."""
-    universe = normalize_universe(raw)
+def build_earnings_down(universe: pd.DataFrame, within_days: int = 4) -> pd.DataFrame:
+    """Earnings gap-DOWN list (Phase 10 step 8) off a NORMALIZED universe — names
+    that just reported AND gapped down AND closed down. These are AVOID signals
+    (broken support / distribution), NOT trade candidates. Ranked most-negative
+    gap first. Not persisted."""
+    if universe is None or len(universe) == 0:
+        return pd.DataFrame()
+    universe = _ensure_normalized(universe)
     if len(universe) == 0:
         return pd.DataFrame()
     g = CONFIG.gates
-    perf = universe[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
-                     if c in universe.columns]]
     universe = universe.copy()
-    universe["rs"] = compute_rs(perf) if len(perf.columns) else np.nan
+    if "rs" not in universe.columns or universe["rs"].isna().all():
+        perf = universe[[c for c in ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
+                         if c in universe.columns]]
+        universe["rs"] = compute_rs(perf) if len(perf.columns) else np.nan
+    has_filing = "latest_filing_date" in universe.columns
     rows = []
     for _, row in universe.iterrows():
         price, avgv = row.get("price", np.nan), row.get("avg_volume", np.nan)
         gap, change = row.get("gap", np.nan), row.get("change", np.nan)
         if not (price > g.min_price) or not (avgv >= g.min_avg_volume):
+            continue
+        if has_filing and not _reported_recently(row.get("latest_filing_date"), within_days):
             continue
         if not (gap == gap and change == change and gap < 0 and change < 0):
             continue                                   # require gap-down AND closed down
@@ -639,62 +681,72 @@ class UniverseResult:
     ok: bool = True
 
 
+def build_universe(client, top_n: int = 500, min_growth: bool = False) -> tuple[pd.DataFrame, list[str]]:
+    """Build the normalized leader universe from Massive via the screener:
+    all active US stocks -> price/volume filter -> top-N OHLCV enrichment ->
+    fundamentals -> §3.3 gates. Returns (normalized_universe, warnings).
+
+    `min_growth` adds the hard EPS/Sales QoQ>=25% filter (3.4) post-enrichment."""
+    g = CONFIG.gates
+    warnings: list[str] = []
+    uni = screener_mod.build_universe_df(client, min_price=g.min_price,
+                                         min_avg_volume=g.min_avg_volume)
+    if uni is None or len(uni) == 0:
+        warnings.append("Massive universe empty (no names passed price/volume).")
+        return pd.DataFrame(), warnings
+    uni = screener_mod.enrich_with_ohlcv(uni, client, top_n=top_n)
+    uni = screener_mod.enrich_with_fundamentals(uni, client)
+    uni = screener_mod.apply_universe_gates(
+        uni, min_price=g.min_price, min_avg_volume=g.min_avg_volume,
+        max_pct_below_high=g.max_pct_below_high, require_above_sma200=True)
+    if min_growth and len(uni):
+        uni = uni[(uni.get("eps_qoq", pd.Series(dtype=float)) >= CONFIG.fundamentals.min_eps_qoq_growth)
+                  & (uni.get("sales_qoq", pd.Series(dtype=float)) >= CONFIG.fundamentals.min_sales_growth)]
+        uni = uni.reset_index(drop=True)
+    warnings.extend(getattr(client, "notes", []) or [])
+    return uni, warnings
+
+
 def fetch_targets_universe(client, regime: Regime, min_growth: bool = False,
                            theme_ctx=None, ipo_ctx=None,
                            ignore_rvol: bool = False,
                            no_industry_gate: bool = False) -> UniverseResult:
-    """Fetch the universe once, snapshot it, and build ranked Targets. Returns
-    both Targets and the normalized universe for downstream Focus enrichment
-    (avoids re-fetching Finviz for --all). `ignore_rvol` drops the relative-
-    volume Finviz filter (and gate) for off-hours prep runs."""
-    screen = dict(TARGETS_SCREEN)
-    if ignore_rvol:
-        screen.pop("Relative Volume", None)
-    if min_growth:
-        screen.update(GROWTH_FILTERS)
-    result = client.fetch_universe(screen, order=FINVIZ_SORT_QUARTER, ascend=False)
-    if result.empty:
+    """Build the universe once from Massive and rank Targets. Returns both
+    Targets and the normalized universe for downstream Focus enrichment (avoids
+    re-scanning for --all). `ignore_rvol` is accepted for call-site
+    compatibility; the screener already filters on average volume, and RVOL is a
+    weighted scoring layer, so off-hours prep runs need no special handling."""
+    universe, warnings = build_universe(client, min_growth=min_growth)
+    if universe is None or len(universe) == 0:
         return UniverseResult(df=pd.DataFrame(), universe=pd.DataFrame(),
-                              warnings=list(result.warnings), ok=False)
-    universe = normalize_universe(result.df)
-    warnings = list(result.warnings)
+                              warnings=warnings, ok=False)
 
-    # RS-universe consistency: rank RS against the BROAD reference universe (the
-    # same one My-Picks and cloud publish use), not the gated subset — so a
-    # ticker's RS matches across local and cloud.
+    # RS across the full built universe (percentile only means anything at scale).
     universe = _inject_broad_rs(client, universe, warnings)
 
-    targets = build_targets(universe, regime, raw_df=result.df, theme_ctx=theme_ctx,
+    targets = build_targets(universe, regime, raw_df=universe, theme_ctx=theme_ctx,
                             ipo_ctx=ipo_ctx, ignore_rvol=ignore_rvol,
                             no_industry_gate=no_industry_gate)
-    return UniverseResult(df=targets, universe=universe, warnings=warnings, ok=result.ok)
+    return UniverseResult(df=targets, universe=universe, warnings=warnings, ok=True)
 
 
 _PERF_COLS = ("perf_week", "perf_month", "perf_quarter", "perf_half", "perf_year")
 
 
 def _inject_broad_rs(client, universe: pd.DataFrame, warnings: list) -> pd.DataFrame:
-    """Compute each universe name's RS as a percentile across the BROAD reference
-    universe (RS_REFERENCE_SCREEN) and set it on `universe['rs']`. Degrades to the
-    local computation if the broad pull fails."""
+    """Compute each universe name's RS as a percentile across the full built
+    universe and set it on `universe['rs']`. With Massive the screener already
+    returns the broad leader set (top-N by volume), so RS is ranked directly
+    across it — no separate reference pull needed."""
     try:
-        ref = client.fetch_universe(RS_REFERENCE_SCREEN, views=("performance",))
-        warnings.extend(ref.warnings)
-        if ref.empty:
-            return universe
-        broad = normalize_universe(ref.df)
-        cols = [c for c in _PERF_COLS if c in broad.columns and c in universe.columns]
+        cols = [c for c in _PERF_COLS if c in universe.columns]
         if not cols:
             return universe
-        combined = pd.concat([broad[["ticker"] + cols], universe[["ticker"] + cols]],
-                             ignore_index=True).drop_duplicates("ticker", keep="first")
-        combined["rs"] = compute_rs(combined[cols])
-        rs_by_ticker = dict(zip(combined["ticker"], combined["rs"]))
         universe = universe.copy()
-        universe["rs"] = universe["ticker"].map(rs_by_ticker)
+        universe["rs"] = compute_rs(universe[cols])
         return universe
     except Exception as exc:  # noqa: BLE001
-        warnings.append(f"broad RS reference fetch failed ({exc}); using local RS.")
+        warnings.append(f"RS computation failed ({exc}); leaving RS unset.")
         return universe
 
 
@@ -710,29 +762,24 @@ def run_targets(client, regime: Regime, limit: int | None = None,
     return LiveResult(df=df, warnings=uni.warnings, ok=uni.ok)
 
 
-def run_earnings(client, limit: int | None = None) -> LiveResult:
-    """Live Earnings: combine the yesterday-after-close and today-before-open
-    screens, dedupe on Ticker, then apply the gap-UP-only rule (3.3 / Section 7).
-    """
-    warnings: list[str] = []
-    frames: list[pd.DataFrame] = []
-    for label, screen in (("yesterday-after-close", EARNINGS_SCREEN_YESTERDAY),
-                          ("today-before-open", EARNINGS_SCREEN_TODAY)):
-        res = client.fetch_universe(screen)
-        warnings.extend(res.warnings)
-        if not res.empty:
-            frames.append(res.df)
-        else:
-            warnings.append(f"earnings screen ({label}) returned no rows.")
+def run_earnings(client, limit: int | None = None,
+                 universe: pd.DataFrame | None = None) -> LiveResult:
+    """Live Earnings off Massive: from the normalized leader universe, keep names
+    that reported in the last few days (latest_filing_date) and apply the
+    gap-UP-only rule (3.3 / Section 7). Polygon has no earnings-date screener, so
+    this surfaces post-earnings reactions among the scanned leaders rather than
+    the entire market's reporters.
 
-    if not frames:
+    Pass `universe` to reuse an already-built scan (avoids a second full pass);
+    otherwise the universe is built here."""
+    warnings: list[str] = []
+    if universe is None or len(universe) == 0:
+        universe, warnings = build_universe(client)
+    if universe is None or len(universe) == 0:
         return LiveResult(df=pd.DataFrame(), warnings=warnings, ok=False)
 
-    combined = pd.concat(frames, ignore_index=True)
-    tcol = "Ticker" if "Ticker" in combined.columns else combined.columns[0]
-    combined = combined.drop_duplicates(subset=[tcol]).reset_index(drop=True)
-    earnings = build_earnings(combined)
-    down = build_earnings_down(combined)               # gap-DOWN avoid list (step 8)
+    earnings = build_earnings(universe)
+    down = build_earnings_down(universe)               # gap-DOWN avoid list (step 8)
     if limit:
         earnings = earnings.head(limit).reset_index(drop=True)
         down = down.head(limit).reset_index(drop=True)

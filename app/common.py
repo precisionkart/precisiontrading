@@ -31,7 +31,7 @@ from pinpoint import charts                           # noqa: E402
 from pinpoint import position_sizing as sizing_mod    # noqa: E402
 from pinpoint import flags as flags_mod               # noqa: E402
 from pinpoint.config import CONFIG                    # noqa: E402
-from pinpoint.finviz_client import FinvizClient       # noqa: E402
+from pinpoint.massive_client import MassiveClient     # noqa: E402
 
 _REGIME_COLOR = {"bull": "#16A34A", "neutral-bull": "#16A34A", "neutral": "#737373",
                  "neutral-bear": "#CA8A04", "bear": "#DC2626", "very-bear": "#111111"}
@@ -270,8 +270,8 @@ def sidebar_footer(scan, cloud: bool) -> None:
 
 
 @st.cache_resource
-def get_client() -> FinvizClient:
-    return FinvizClient()
+def get_client() -> MassiveClient:
+    return MassiveClient()
 
 
 def now_hhmm() -> str:

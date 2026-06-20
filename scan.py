@@ -32,7 +32,7 @@ from pinpoint import regime as regime_mod
 from pinpoint import pipeline
 from pinpoint import store
 from pinpoint.config import CONFIG
-from pinpoint.finviz_client import FinvizClient
+from pinpoint.massive_client import MassiveClient
 
 
 # --------------------------------------------------------------------------
@@ -164,7 +164,7 @@ def run_live(args) -> int:
     print(DISCLAIMER)
     print("-" * 72)
 
-    client = FinvizClient()
+    client = MassiveClient()
 
     # Regime first (Section 3.2) — every list is read in this context.
     reg = regime_mod.fetch_regime(client)
@@ -180,6 +180,7 @@ def run_live(args) -> int:
     targets = focus = earnings_df = None
     earnings_down = None
     ipo_watch = None
+    built_universe = None      # reuse the scanned universe for the earnings pass
 
     if args.min_growth:
         print("  (--min-growth: applying hard EPS/Sales QoQ >= 25% Finviz filters to Targets)")
@@ -215,6 +216,7 @@ def run_live(args) -> int:
                                               no_industry_gate=args.no_industry_gate)
         any_403 = any_403 or _has_block(uni.warnings)
         targets = uni.df
+        built_universe = uni.universe
         if want_targets:
             shown = targets.head(args.limit) if args.limit else targets
             _print_table(
@@ -243,7 +245,7 @@ def run_live(args) -> int:
                 print("  (no names currently show a valid pattern with R:R>=5:1)")
 
     if want_earnings:
-        ern = pipeline.run_earnings(client, limit=args.limit)
+        ern = pipeline.run_earnings(client, limit=args.limit, universe=built_universe)
         earnings_df = ern.df
         earnings_down = ern.down
         _print_table(
@@ -335,7 +337,7 @@ def publish(cache_top: int = 250) -> int:
     from pinpoint.rs_rating import compute_rs
 
     print(f"Pinpoint Scanner v{__version__} — PUBLISH (writing latest_scan.json)")
-    client = FinvizClient()
+    client = MassiveClient()
     warnings: list[str] = []
 
     reg = regime_mod.fetch_regime(client)
@@ -346,16 +348,16 @@ def publish(cache_top: int = 250) -> int:
     ipo_res = ipo_mod.build_ipo_watchlist(client)
     warnings += ipo_res.warnings
 
-    # One broad screen (all views) -> universe; Targets via in-code gates.
-    res = client.fetch_universe(RS_REFERENCE_SCREEN)
-    warnings += res.warnings
-    universe = pipeline.normalize_universe(res.df)
-    targets = pipeline.build_targets(universe, reg, raw_df=res.df, theme_ctx=theme_ctx,
+    # Build the leader universe once from Massive; Targets via in-code gates.
+    universe, uw = pipeline.build_universe(client)
+    warnings += uw
+    universe = pipeline._inject_broad_rs(client, universe, warnings)
+    targets = pipeline.build_targets(universe, reg, raw_df=universe, theme_ctx=theme_ctx,
                                      ipo_ctx=ipo_res.ipo_ctx)
     index_daily = pipeline.ohlcv_mod.fetch_daily(CONFIG.regime.benchmarks[0]).df
     focus = pipeline.enrich_focus(targets, universe, reg, index_daily=index_daily,
                                   theme_ctx=theme_ctx, ipo_ctx=ipo_res.ipo_ctx)
-    ern = pipeline.run_earnings(client)
+    ern = pipeline.run_earnings(client, universe=universe)
     warnings += ern.warnings
 
     # Snapshot (full normalized fields) for My-Picks RS + offline grading.

@@ -38,6 +38,7 @@ def test_looks_ohlcv():
 
 def test_fetch_daily_uses_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(o, "_cache_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(o, "MASSIVE_API_KEY", "")     # exercise the yfinance path
     calls = {"n": 0}
 
     def fake_yf(ticker, period="2y"):
@@ -54,6 +55,7 @@ def test_fetch_daily_uses_cache(tmp_path, monkeypatch):
 
 def test_fetch_daily_falls_back_to_stooq(tmp_path, monkeypatch):
     monkeypatch.setattr(o, "_cache_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(o, "MASSIVE_API_KEY", "")
     monkeypatch.setattr(o, "_fetch_yfinance", lambda t, period="2y": pd.DataFrame())
     monkeypatch.setattr(o, "_fetch_stooq", lambda t: sample_data.ohlcv_fixture(t))
     r = o.fetch_daily("ABC", use_cache=False)
@@ -62,6 +64,7 @@ def test_fetch_daily_falls_back_to_stooq(tmp_path, monkeypatch):
 
 def test_fetch_daily_all_fail_returns_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(o, "_cache_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(o, "MASSIVE_API_KEY", "")
     monkeypatch.setattr(o, "_fetch_yfinance", lambda t, period="2y": pd.DataFrame())
     monkeypatch.setattr(o, "_fetch_stooq", lambda t: pd.DataFrame())
     r = o.fetch_daily("NOPE", use_cache=False)

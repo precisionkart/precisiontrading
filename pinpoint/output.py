@@ -101,8 +101,28 @@ def write_xlsx(focus: pd.DataFrame, targets: pd.DataFrame, earnings: pd.DataFram
 
 
 def _xl_value(v):
-    if isinstance(v, float) and v != v:
-        return None
+    if v is None:
+        return ""
+    if isinstance(v, list):
+        return ", ".join(str(x) for x in v)
+    if isinstance(v, dict):
+        return str(v)
+    try:
+        import math
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return ""
+    except Exception:
+        pass
+    try:
+        import numpy as np
+        if isinstance(v, (np.integer,)):
+            return int(v)
+        if isinstance(v, (np.floating,)):
+            return float(v)
+        if isinstance(v, (np.bool_,)):
+            return bool(v)
+    except Exception:
+        pass
     return v
 
 
