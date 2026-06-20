@@ -186,7 +186,8 @@ def analyse_ticker(ticker: str) -> str:
             (price - sma200) / sma200 * 100 if sma200 else 0)
 
         pat = patterns_mod.best_pattern(df, require_measured=True)
-        setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target) if pat else None
+        setup = (entries_mod.compute_setup(pat.trigger, entries_mod.recent_support_low(df),
+                                           pat.measured_target) if pat else None)
 
         high_52w = float(df["High"].tail(252).max())
         low_52w = float(df["Low"].tail(252).min())
@@ -308,7 +309,8 @@ def compare_tickers(t1: str, t2: str) -> str:
                 (price - sma50) / sma50 * 100 if sma50 else 0,
                 (price - sma200) / sma200 * 100 if sma200 else 0)
             pat = patterns_mod.best_pattern(df, require_measured=True)
-            setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target) if pat else None
+            setup = (entries_mod.compute_setup(pat.trigger, entries_mod.recent_support_low(df),
+                                               pat.measured_target) if pat else None)
             rr_str = (f"{setup.reward_risk:.1f}:1 {'✅' if setup and setup.rr_ok else '⚠️'}"
                       if setup else "n/a")
             rating, tier = compute_rating(df, stage, pat, setup)

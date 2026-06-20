@@ -192,7 +192,8 @@ if do_lookup and tk_in.strip():
                     "ema10": float(last.get("EMA10", float("nan"))),
                     "ema20": float(last.get("EMA20", float("nan")))}
             if pat is not None and pat.measured_target is not None:
-                setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target)
+                setup = entries_mod.compute_setup(pat.trigger, entries_mod.recent_support_low(d),
+                                                  pat.measured_target)
                 info.update({
                     "pattern": pat.label, "confidence": pat.confidence,
                     "finviz_confirmed": bool(getattr(pat, "finviz_confirmed", False)),

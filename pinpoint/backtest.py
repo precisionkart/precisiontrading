@@ -242,7 +242,8 @@ class BacktestEngine:
             pat = patterns_mod.best_pattern(df, finviz_signals=None, require_measured=True)
             if pat is None or pat.measured_target is None:
                 return None
-            setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target)
+            setup = entries_mod.compute_setup(pat.trigger, entries_mod.recent_support_low(df),
+                                              pat.measured_target)
             if not setup.rr_ok:
                 return None
             return Signal(

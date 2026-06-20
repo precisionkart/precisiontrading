@@ -127,3 +127,18 @@ def compute_setup(trigger: float, support_low: float,
                       measured_target=(round(measured_target, 2)
                                        if measured_target is not None else None),
                       reward_risk=reward_risk, rr_ok=rr_ok, note=note)
+
+
+def recent_support_low(df, lookback=None) -> float:
+    """Canonical stop support: the tight recent-pivot low over the last
+    `lookback` bars (defaults to CONFIG.entry.stop_lookback). This is the single
+    source of truth for the support low fed into compute_setup, so every surface
+    (scan pipeline, dashboard, My Picks, Telegram, Position Sizer, backtest)
+    produces an identical .89 stop and R:R. Returns float NaN if unavailable."""
+    if df is None or len(df) == 0 or "Low" not in df:
+        return float("nan")
+    lb = lookback or CONFIG.entry.stop_lookback
+    try:
+        return float(df["Low"].iloc[-lb:].min())
+    except Exception:  # noqa: BLE001
+        return float("nan")
