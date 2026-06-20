@@ -378,9 +378,20 @@ def send_scan_telegram(args) -> None:
                 bot.send_watchlist_promoted(**p)
             for d in degraded:
                 bot.send_watchlist_degraded(**d)
-            top = new_setups[0] if new_setups else {}
-            bot.send_scan_complete(n_setups=len(new_setups), top_ticker=top.get("ticker", "none"),
-                                   top_score=top.get("score", 0), regime=cache.regime_state)
+            # tier counts across the ranked lists (focus=Elite/Good, targets=total)
+            focus_df = cache.lists.get("focus")
+            targets_df = cache.lists.get("targets")
+            n_elite = (len(focus_df[focus_df["tier"] == "Elite"])
+                       if focus_df is not None and len(focus_df) and "tier" in focus_df.columns else 0)
+            n_good = (len(focus_df[focus_df["tier"] == "Good"])
+                      if focus_df is not None and len(focus_df) and "tier" in focus_df.columns else 0)
+            n_total = len(targets_df) if targets_df is not None else 0
+            top = focus_df.iloc[0] if (focus_df is not None and len(focus_df)) else None
+            bot.send_scan_complete(
+                n_total=n_total, n_elite=n_elite, n_good=n_good,
+                top_ticker=str(top["ticker"]) if top is not None else "none",
+                top_score=float(top["pinpoint_score"]) if top is not None else 0,
+                regime=cache.regime_state)
             if now_uk.weekday() == 4:                       # Friday weekly wrap
                 all_pos = _store.load_positions()
                 wk_start = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()

@@ -66,7 +66,8 @@ class TelegramBot:
         if stalking:
             lines.append("*STALK TODAY (set buy stops):*")
             for s in stalking[:5]:
-                lines.append(f"`{s['ticker']}` ${s['entry']:.2f} stop ${s['stop']:.2f} — "
+                e = s.get("entry_trigger", s.get("entry", 0))
+                lines.append(f"`{s['ticker']}` ${e:.2f} stop ${s['stop']:.2f} — "
                              f"{s['pattern']} RS {s['rs']:.0f}")
         else:
             lines.append("*STALK TODAY:* _None ready — be patient_")
@@ -146,15 +147,17 @@ class TelegramBot:
         if new_setups:
             lines.append("*NEW FOR TOMORROW:*")
             for s in new_setups[:3]:
+                e = s.get("entry_trigger", s.get("entry", 0))
                 lines.append(f"`{s['ticker']}` — {s['pattern']} | Score {s['score']:.0f} | "
-                             f"E ${s['entry']:.2f} R:R {s['rr']:.1f}:1")
+                             f"E ${e:.2f} R:R {s['rr']:.1f}:1")
         else:
             lines.append("*NEW:* _No new setups tonight_")
         if promoted:
             lines.append("\n*PROMOTED TO STALK:*")
             for p in promoted:
+                e = p.get("entry_trigger", p.get("entry", 0))
                 lines.append(f"⭐ `{p['ticker']}` score {p['old_score']:.0f}→{p['new_score']:.0f}"
-                             f" — set buy stop ${p['entry']:.2f}")
+                             f" — set buy stop ${e:.2f}")
         if degraded:
             lines.append("\n*DEGRADED:*")
             for d in degraded:
@@ -232,10 +235,16 @@ class TelegramBot:
                  "_→ Cancel buy stop in IBKR_", "_→ Remove from watchlist_"]
         return self.send("\n".join(lines))
 
-    def send_scan_complete(self, n_setups, top_ticker, top_score, regime):
-        """Quick ping when scan finishes (no open app needed)."""
-        return self.send(f"✅ *Scan complete*\n{n_setups} setup(s) | Regime: {regime}\n"
-                         f"Top: `{top_ticker}` score {top_score:.0f}\n_Full brief at 8am UK_")
+    def send_scan_complete(self, n_total, n_elite, n_good, top_ticker, top_score, regime):
+        """Quick ping when scan finishes — tier breakdown across the ranked list."""
+        return self.send(
+            f"✅ *Scan complete*\n"
+            f"Regime: {regime}\n\n"
+            f"🔥 Elite (80+): {n_elite}\n"
+            f"⚡ Good (65-79): {n_good}\n"
+            f"Total ranked: {n_total}\n\n"
+            f"Top: `{top_ticker}` score {top_score:.0f}\n"
+            f"_Full brief at 8am UK_")
 
 
 # ── Singleton ──────────────────────────────────────────────────────
