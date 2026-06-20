@@ -41,6 +41,8 @@ from .scoring import score_layers
 
 logger = logging.getLogger("pinpoint.pipeline")
 
+from .config import WEEKEND_MAX_PCT_BELOW_HIGH, WEEKEND_MIN_AVG_VOLUME  # noqa: E402
+
 
 def save_universe_snapshot(raw_df: pd.DataFrame, label: str = "targets",
                            snapshot_date: date | None = None) -> str | None:
@@ -138,9 +140,15 @@ class GateResult:
 
 def evaluate_gates(row: pd.Series, ignore_rvol: bool = False) -> GateResult:
     """Apply the §3.3 universe gates to one normalized row. RS is checked
-    separately (it needs the whole universe). `ignore_rvol` drops the relative-
-    volume gate for weekend/evening prep runs (RVOL is naturally low off-hours)."""
+    separately (it needs the whole universe). `ignore_rvol` marks a weekend /
+    after-hours prep run: it drops the RVOL gate (naturally low off-hours) AND
+    casts a wider net — the near-52w-high limit widens 10%->25% and the average-
+    volume floor eases 300k->200k, so good names that are basing or slightly
+    thinner still surface for Monday. Price gate is never relaxed."""
     g = CONFIG.gates
+    weekend = bool(ignore_rvol)
+    max_pbh = WEEKEND_MAX_PCT_BELOW_HIGH if weekend else g.max_pct_below_high
+    min_avgv = WEEKEND_MIN_AVG_VOLUME if weekend else g.min_avg_volume
     checks: dict[str, bool] = {}
     reasons: list[str] = []
 
@@ -155,12 +163,11 @@ def evaluate_gates(row: pd.Series, ignore_rvol: bool = False) -> GateResult:
     pbh = row.get("pct_below_high", np.nan)
 
     check("price>$10", price > g.min_price, f"price ${price:.2f} <= ${g.min_price:.0f}")
-    check("avg_vol>=300k", avgv >= g.min_avg_volume,
-          f"avg vol {avgv:,.0f} < {g.min_avg_volume:,}")
+    check("avg_vol", avgv >= min_avgv, f"avg vol {avgv:,.0f} < {min_avgv:,}")
     if not ignore_rvol:
         check("rvol>2", relv > g.min_rel_volume, f"RVOL {relv:.2f} <= {g.min_rel_volume}")
-    check("near 52w high", pbh <= g.max_pct_below_high,
-          f"{pbh:.1f}% below high (> {g.max_pct_below_high:.0f}% limit)")
+    check("near 52w high", pbh <= max_pbh,
+          f"{pbh:.1f}% below high (> {max_pbh:.0f}% limit)")
 
     return GateResult(passed=all(checks.values()), checks=checks, reasons=reasons)
 
@@ -192,6 +199,16 @@ def snapshot_layers(row: pd.Series, regime: Regime, rs: float,
     top_industry = bool(theme_ctx and theme_ctx.is_top_industry(sector))
     ipo_edge = bool(ipo_ctx and ipo_ctx.get(row.get("ticker")))
 
+    # Volume confirmation: live session wants RVOL>2; off-hours the snapshot RVOL
+    # is meaningless (we relax the RVOL GATE for the same reason), so weekend
+    # scans confirm on above-average Friday volume (rel_volume > 1) instead of
+    # unfairly docking every name the ~11-pt layer it can never earn off-hours.
+    from .config import market_is_open
+    rvol = row.get("rel_volume", 0)
+    rvol = rvol if rvol == rvol else 0          # NaN -> 0
+    vol_threshold = g.min_rel_volume if market_is_open() else 1.0
+    volume_confirmation = bool(rvol > vol_threshold)
+
     return {
         "regime_bull": regime.state == BULL,
         "tight_contraction": contraction,
@@ -205,7 +222,7 @@ def snapshot_layers(row: pd.Series, regime: Regime, rs: float,
         "strong_growth": growth.strong_growth,
         "ipo_edge": ipo_edge,              # Section 3.11
         "beach_ball": False,               # overlaid by enrich_focus
-        "volume_confirmation": bool(row.get("rel_volume", 0) > g.min_rel_volume),
+        "volume_confirmation": volume_confirmation,
         "reward_risk": False,              # overlaid by enrich_focus (entries.py)
         "earnings_flag": False,            # overlaid by enrich_focus (earnings_watch)
         # prerequisites (default true; set False by later modules):

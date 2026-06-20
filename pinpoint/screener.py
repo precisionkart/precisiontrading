@@ -109,6 +109,54 @@ def _build_universe_from_cache(min_price: float, min_avg_volume: int) -> pd.Data
     return df
 
 
+# Top liquid US stocks — the core Pinpoint universe. Seeded once so weekend cache
+# scans run against quality leaders, not whatever incidental names got cached.
+SEED_TICKERS: list[str] = [
+    "AAPL", "MSFT", "NVDA", "GOOGL", "GOOG", "META", "AMZN", "TSLA", "AVGO", "AMD",
+    "SMCI", "ARM", "TSM", "ASML", "AMAT", "LRCX", "KLAC", "MRVL", "QCOM",
+    "MU", "INTC", "TXN", "ONTO", "COHU", "WOLF", "SWKS", "MPWR", "WDC", "STX",
+    "CRM", "NOW", "SNOW", "DDOG", "CRWD", "ZS", "NET", "PANW", "MDB",
+    "GTLB", "HUBS", "BILL", "DOCN", "CFLT", "ESTC", "TENB", "S",
+    "HOOD", "COIN", "PYPL", "V", "MA", "AFRM", "SOFI", "NU",
+    "LLY", "NVO", "ABBV", "ISRG", "DXCM", "PODD", "INSP", "TMDX",
+    "CCJ", "LEU", "NNE", "OKLO", "VST", "CEG", "NRG", "FSLR", "ENPH",
+    "SHOP", "MELI", "PDD", "CPNG", "SE",
+    "UBER", "ABNB", "RBLX", "U", "TTWO", "APP", "TTD",
+    "HIMS", "RDDT", "PINS", "SNAP", "DUOL", "CELH", "CAVA",
+]
+
+
+def seed_cache(client=None, tickers: list[str] | None = None) -> dict:
+    """Pre-populate the OHLCV cache for a quality universe so weekend cache scans
+    have good leaders to rank. Run once:
+
+        python -c "from pinpoint.screener import seed_cache; seed_cache()"
+
+    Uses ohlcv.fetch_daily (Massive primary), forcing a fresh pull (use_cache=
+    False). Returns {ticker: ok}. Safe to re-run."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    tickers = tickers or SEED_TICKERS
+    logger.info("seed_cache: fetching %d tickers...", len(tickers))
+    results: dict[str, bool] = {}
+
+    def _one(tk):
+        try:
+            res = ohlcv_mod.fetch_daily(tk, use_cache=False)
+            return tk, bool(res.ok and not res.empty)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("seed_cache failed for %s: %s", tk, exc)
+            return tk, False
+
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for fut in as_completed([ex.submit(_one, t) for t in tickers]):
+            tk, ok = fut.result()
+            results[tk] = ok
+            print(f"  {'✓' if ok else '✗'} {tk}")
+    ok_n = sum(1 for v in results.values() if v)
+    print(f"Cache seeded: {ok_n}/{len(tickers)} successful")
+    return results
+
+
 def build_universe_df(client, min_price: float = 10.0,
                       min_avg_volume: int = 300_000) -> pd.DataFrame:
     """All active US stocks -> batch snapshots -> price/volume filter.
@@ -210,9 +258,13 @@ def enrich_with_ohlcv(universe_df: pd.DataFrame, client,
         return _empty_universe()
     from .config import market_is_open
     cache_only = not market_is_open()        # weekend: pure cache reads, no API
-    df = universe_df.sort_values("volume", ascending=False).head(top_n).copy()
+    # Cache reads are ~instant, so off-hours we enrich the WHOLE cached universe
+    # (no top-N cap) — more candidates reach the gates and the RS percentile.
+    effective_n = len(universe_df) if cache_only else top_n
+    df = universe_df.sort_values("volume", ascending=False).head(effective_n).copy()
     df = df.reset_index(drop=True)
     tickers = list(df["ticker"])
+    logger.info("enrich_with_ohlcv: %d candidates (cache_only=%s)", len(tickers), cache_only)
 
     def _one(tk):
         res = ohlcv_mod.fetch_daily(tk, cache_only=cache_only)
@@ -299,19 +351,35 @@ def apply_universe_gates(df: pd.DataFrame, min_price: float = 10.0,
         return _empty_universe()
     if relax_rvol is None:
         relax_rvol = not market_is_open()
+    # Weekend / off-hours: cast a wider net (matches pipeline.evaluate_gates) —
+    # near-high 10%->25%, avg-volume 300k->200k, and don't require price above the
+    # 200 SMA (good leaders may be basing). Live session keeps the strict gates.
+    if relax_rvol:
+        from .config import WEEKEND_MAX_PCT_BELOW_HIGH, WEEKEND_MIN_AVG_VOLUME
+        max_pct_below_high = max(max_pct_below_high, WEEKEND_MAX_PCT_BELOW_HIGH)
+        min_avg_volume = min(min_avg_volume, WEEKEND_MIN_AVG_VOLUME)
+        require_above_sma200 = False
     out = df.copy()
-    mask = (out["price"] > min_price) & (out["avg_volume"] >= min_avg_volume)
-    mask &= out["pct_below_high"] <= max_pct_below_high
+    logger.info("GATE FUNNEL start: %d names (relax_rvol=%s)", len(out), relax_rvol)
+    out = out[out["price"] > min_price]
+    logger.info("  after price > $%.0f: %d", min_price, len(out))
+    out = out[out["avg_volume"] >= min_avg_volume]
+    logger.info("  after avg_volume >= %s: %d", f"{min_avg_volume:,}", len(out))
+    out = out[out["pct_below_high"] <= max_pct_below_high]
+    logger.info("  after pct_below_high <= %.0f%%: %d", max_pct_below_high, len(out))
     if require_above_sma200:
-        mask &= out["sma200_pct"] > 0
-    if not relax_rvol and "rel_volume" in out.columns:
-        # rel_volume comes from OHLCV (enrich_with_ohlcv), NOT the stale snapshot.
-        mask &= out["rel_volume"] >= min_rel_volume
+        out = out[out["sma200_pct"] > 0]
+        logger.info("  after above 200 SMA: %d", len(out))
     else:
-        logger.info("RVOL gate relaxed (market closed / weekend scan)")
-    out = out[mask.fillna(False)]
+        logger.info("  SMA200 gate relaxed (weekend wider net)")
+    if not relax_rvol and "rel_volume" in out.columns:
+        out = out[out["rel_volume"] >= min_rel_volume]
+        logger.info("  after RVOL >= %.1f: %d", min_rel_volume, len(out))
+    else:
+        logger.info("  RVOL gate RELAXED (market closed / weekend scan)")
     if "perf_quarter" in out.columns:
         out = out.sort_values("perf_quarter", ascending=False, na_position="last")
     out = out.reset_index(drop=True)
     out.attrs["rvol_relaxed"] = bool(relax_rvol)
+    logger.info("GATE FUNNEL final: %d names", len(out))
     return out

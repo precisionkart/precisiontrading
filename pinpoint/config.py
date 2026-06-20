@@ -75,6 +75,13 @@ class UniverseGates:
     preferred_adr_pct: float = 5.0
 
 
+# Weekend / after-hours WIDER-NET gate values (applied only when the RVOL gate is
+# relaxed — i.e. market closed or forced weekend mode). Captures basing & slightly
+# thinner leaders for Monday prep without loosening anything during live hours.
+WEEKEND_MAX_PCT_BELOW_HIGH = 25.0       # near-52w-high limit 10% -> 25%
+WEEKEND_MIN_AVG_VOLUME = 200_000        # avg-volume floor 300k -> 200k
+
+
 # ---------------------------------------------------------------------------
 # 3.4  FUNDAMENTAL QUALITY — growth = the catalyst engine.
 # ---------------------------------------------------------------------------
