@@ -108,6 +108,42 @@ def get_signal(stage, pat, setup) -> str:
     return "👀 KEEP WATCHING"
 
 
+def compute_rating(df, stage, pat, setup) -> tuple:
+    """Overall Pinpoint rating (0-100 score + tier) from the production scorer —
+    the same layers the dashboard uses, derived point-in-time. Returns
+    (score, tier_label)."""
+    try:
+        from pinpoint import scoring as scoring_mod, patterns as patterns_mod
+        from pinpoint.config import market_is_open
+        last = df.iloc[-1]
+        close = float(last["Close"])
+        comp = patterns_mod.atr_compression(df)
+        ema10 = float(last.get("EMA10", float("nan")))
+        ema20 = float(last.get("EMA20", float("nan")))
+        sma50 = float(last.get("SMA50", float("nan")))
+        sma200 = float(last.get("SMA200", float("nan")))
+        avg20v = float(df["Volume"].iloc[-20:].mean()) if len(df) >= 20 else float("nan")
+        vol_thr = 2.0 if market_is_open() else 1.0
+        layers = {
+            "valid_pattern": pat is not None,
+            "reward_risk": bool(setup and getattr(setup, "rr_ok", False)),
+            "stage_2": bool(stage.is_stage2),
+            "support_resistance_flip": False,
+            "timeframe_continuity": False,
+            "correct_ma_reaction": bool(ema20 == ema20 and close >= ema20 and
+                                        (abs(close - ema10) / close <= 0.08
+                                         if ema10 == ema10 and close else False)),
+            "volume_confirmation": bool(avg20v == avg20v and float(last["Volume"]) > avg20v * vol_thr),
+            "beach_ball": False, "hot_theme": False, "top_industry_group": False,
+            "chart_ok": True, "not_earnings_gap_down": True,
+        }
+        res = scoring_mod.score_layers(
+            layers, partials={"tight_contraction": comp.get("compression_score", 0.0)})
+        return float(res.score), (res.tier or "")
+    except Exception:  # noqa: BLE001
+        return float("nan"), ""
+
+
 def _company_name(ticker: str) -> str:
     try:
         from pinpoint.massive_client import MassiveClient
@@ -161,6 +197,7 @@ def analyse_ticker(ticker: str) -> str:
 
         signal = get_signal(stage, pat, setup)
         company = _company_name(ticker)
+        rating, tier = compute_rating(df, stage, pat, setup)
         sig_dot = ("🟢" if signal.startswith(("🚀", "✅")) else
                    "🔴" if signal.startswith("🚫") else "🟡")
 
@@ -168,6 +205,13 @@ def analyse_ticker(ticker: str) -> str:
                  f"📊 *{ticker}*" + (f" — {company}" if company else ""),
                  "━━━━━━━━━━━━━━━━━━━━━━",
                  f"${price:.2f}  {change_emoji} {abs(change_pct):.2f}%  {sig_dot}", ""]
+
+        # Overall rating (0-100 pinpoint score + tier)
+        if rating == rating:
+            filled = max(0, min(10, round(rating / 10)))
+            bar = "█" * filled + "░" * (10 - filled)
+            tier_txt = f"  ·  {tier}" if tier else ""
+            lines += ["⭐ *OVERALL RATING*", f"{bar}  {rating:.0f}/100{tier_txt}", ""]
 
         # Stage
         stword = _STAGE_WORD.get(stage.stage, stage.label)
@@ -267,8 +311,11 @@ def compare_tickers(t1: str, t2: str) -> str:
             setup = entries_mod.compute_setup(pat.trigger, pat.support_low, pat.measured_target) if pat else None
             rr_str = (f"{setup.reward_risk:.1f}:1 {'✅' if setup and setup.rr_ok else '⚠️'}"
                       if setup else "n/a")
+            rating, tier = compute_rating(df, stage, pat, setup)
+            rate_str = f"{rating:.0f}/100{(' ' + tier) if tier else ''}" if rating == rating else "—"
             lines.append(f"*{ticker}* ${price:.2f}\n{'✅' if stage.is_stage2 else '❌'} {stage.label}\n"
-                         f"Pattern: {pat.label if pat else 'No pattern'}\nR:R: {rr_str}\n")
+                         f"Rating: {rate_str}\nPattern: {pat.label if pat else 'No pattern'}\n"
+                         f"R:R: {rr_str}\n")
         except Exception as e:  # noqa: BLE001
             lines.append(f"*{ticker}:* Error — {e}\n")
     return "\n".join(lines)
