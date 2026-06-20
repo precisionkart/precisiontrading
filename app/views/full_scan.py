@@ -38,7 +38,7 @@ if CLOUD and "full_scan" not in st.session_state:
 fs = st.session_state.get("full_scan")
 if not fs:
     msg = ("No published scan found." if CLOUD else
-           "Click <b>Run Scan</b> to fetch live Finviz screens (not auto-run — rate limits).")
+           "Click <b>Run Scan</b> to fetch live Massive screens (not auto-run — rate limits).")
     st.markdown(f"<div class='pp-empty'>{msg}</div>", unsafe_allow_html=True)
     c.disclaimer_footer()
     st.stop()

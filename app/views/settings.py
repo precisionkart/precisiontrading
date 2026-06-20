@@ -41,7 +41,7 @@ st.markdown("<div class='pp-sub'>Read-only for now — thresholds live in "
             "<code>pinpoint/config.py</code> (the single source of truth).</div>",
             unsafe_allow_html=True)
 
-mode = "Read-only cloud (latest_scan.json)" if c.cloud_mode() else "Local (live Finviz)"
+mode = "Read-only cloud (latest_scan.json)" if c.cloud_mode() else "Local (live Massive)"
 g = CONFIG.gates
 rows = [
     ("Mode", mode),

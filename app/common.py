@@ -257,7 +257,7 @@ def sidebar_footer(scan, cloud: bool) -> None:
                     f"</span>{scan['regime'].state.upper()}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pp-asof'>Data as of {_html.escape(scan.get('as_of') or '—')}</div>",
                     unsafe_allow_html=True)
-    if st.button("↻", key="side_refresh", help="Refresh scan (live Finviz)"):
+    if st.button("↻", key="side_refresh", help="Refresh scan (live Massive)"):
         new = load_published() if cloud else full_scan()
         st.session_state["scan"] = new
         if new:
@@ -377,7 +377,7 @@ def reference_universe():
 
 # ---------------------------------------------------------------------------
 # Read-only cloud mode (Phase 8): render from the committed latest_scan.json,
-# make ZERO live Finviz calls.
+# make ZERO live Massive calls.
 # ---------------------------------------------------------------------------
 def cloud_mode() -> bool:
     return os.environ.get("PINPOINT_CLOUD", "").lower() in ("1", "true", "yes")
