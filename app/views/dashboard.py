@@ -95,7 +95,7 @@ focus_row = t1_rows[0] if t1_rows else None
 rest_t1 = t1_rows[1:]
 
 # ---- Today's focus + open positions, side by side (mockup grid-a) ----
-col_l, col_r = st.columns([1.62, 1], gap="large")
+col_l, col_r = st.columns([1.62, 1], gap="medium")
 with col_l:
     if focus_row is not None:
         _, frow = focus_row
@@ -108,7 +108,7 @@ with col_r:
     ui.positions_widget(lives)
 
 # ---- Sector strength + the rest of the setups, side by side (mockup grid-b) ----
-col_sl, col_sr = st.columns([1, 1.62], gap="large")
+col_sl, col_sr = st.columns([1, 1.62], gap="medium")
 with col_sl:
     ui.sector_ladder(scan.get("themes", []))
 with col_sr:

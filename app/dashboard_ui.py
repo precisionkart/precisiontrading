@@ -70,6 +70,12 @@ _CSS = """
 .ppx-tbl .rr{font-family:var(--ppx-mono);font-weight:700;color:var(--ppx-ink);text-align:right}
 .ppx-tbl .lvl{font-family:var(--ppx-mono);font-weight:600;font-size:13px}
 .ppx-tbl .lvl-entry{color:var(--ppx-bull)}.ppx-tbl .lvl-stop{color:var(--ppx-bear)}.ppx-tbl .lvl-tgt{color:var(--ppx-ink)}
+/* setups rebuilt as real Streamlit rows: thead-style header strip + row dividers */
+.ppx-thr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1.2fr 1.2fr 1.2fr 1fr 1.3fr;gap:.5rem;align-items:center;padding:9px 6px 7px;border-bottom:1px solid var(--ppx-line)}
+.ppx-thr>span{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
+.ppx-thr>span.num{text-align:right}
+[class*="st-key-setups_row"]{border-bottom:1px solid var(--ppx-line);padding:2px 0}
+[class*="st-key-setups_row_0"]{background:var(--ppx-brand-soft);border-radius:8px}
 
 /* generic card */
 .ppx-card{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
@@ -310,91 +316,83 @@ def sector_ladder(themes: list) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Today's setups — ranked table (mockup .tbl) + a docked row of ticker buttons.
+# Today's setups — ranked rows of real Streamlit widgets (clickable ticker/star).
 # ---------------------------------------------------------------------------
 def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") -> None:
-    """Ranked setups as the mockup's table: Ticker/RS/Score/Pattern/R:R/Sector,
-    with RS & Score meters and a star. `rows` is a list of dicts (Ticker, RS,
-    Score, Pattern, Sector, R:R). The HTML table is display-only (clicks can't
-    fire from raw HTML), so a thin row of ticker buttons is docked beneath for
-    the actual open-analysis action. `on_pick(ticker)` is called on click."""
+    """Ranked setups as REAL Streamlit rows (so the ticker and star are
+    clickable): Ticker · RS · Score · Entry · Stop · Target · R:R · Sector, with
+    RS/Score graded meters. `rows` is a list of dicts (Ticker, RS, Score, Sector,
+    Entry, Stop, R:R). Clicking a ticker calls `on_pick(ticker)`; clicking a star
+    adds it to the watchlist. Pattern column removed."""
     if not rows:
         st.markdown("<div class='ppx-card'><div class='ppx-card-h'><h3>Today's setups</h3></div>"
                     "<div style='padding:14px 16px;color:var(--ppx-muted);font-size:13px'>"
                     "No names scored 50+.</div></div>", unsafe_allow_html=True)
         return
 
-    sub = f"ranked by score" if n_total is None else f"ranked by score · {n_total} scanned"
+    sub = "ranked by score" if n_total is None else f"ranked by score · {n_total} scanned"
     watched = set(store.load_watchlist()) if hasattr(store, "load_watchlist") else set()
 
-    body = []
-    for i, r in enumerate(rows):
-        tk = str(r.get("Ticker", ""))
-        rs = r.get("RS")
-        sc = r.get("Score")
-        pat = str(r.get("Pattern") or "—")
-        sect = str(r.get("Sector") or "—")
-        rr_ = r.get("R:R")
-        rs_txt = f"{float(rs):.0f}" if isinstance(rs, (int, float)) and rs == rs else "—"
-        sc_txt = f"{float(sc):.0f}" if isinstance(sc, (int, float)) and sc == sc else "—"
-        rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
-        rs_g, sc_g = _grade(rs), _grade(sc)
-        rs_w, sc_w = _pct(rs), _pct(sc)
-        # Entry / Stop / Target — Target computed like the focus card.
-        e_, s_ = r.get("Entry"), r.get("Stop")
-        e_txt, s_txt = _money(e_), _money(s_)
-        if (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float)) and s_ == s_
-                and isinstance(rr_, (int, float)) and rr_ == rr_):
-            t_txt = _money(e_ + rr_ * (e_ - s_))
-        else:
-            t_txt = "—"
-        # short pattern as the small sub-label under ticker
-        pat_short = pat.split("·")[0].strip()
-        if len(pat_short) > 16:
-            pat_short = pat_short[:15] + "…"
-        star_on = " on" if tk in watched else ""
-        lead = " lead-row" if i == 0 else ""
-        body.append(
-            f"<tr class='{lead}'>"
-            f"<td><div class='cell-tkr'><span class='star{star_on}'>★</span>"
-            f"<span><b>{_html.escape(tk)}</b><small>{_html.escape(pat_short)}</small></span></div></td>"
-            f"<td class='td-num'><div class='gnum {rs_g}'>{rs_txt}"
-            f"<span class='ppx-meter sm'><span style='width:{rs_w:.0f}%'></span></span></div></td>"
-            f"<td class='td-num'><div class='gnum {sc_g}'>{sc_txt}"
-            f"<span class='ppx-meter sm'><span style='width:{sc_w:.0f}%'></span></span></div></td>"
-            f"<td class='pat'>{_html.escape(pat)}</td>"
-            f"<td class='td-num'><span class='lvl lvl-entry'>{e_txt}</span></td>"
-            f"<td class='td-num'><span class='lvl lvl-stop'>{s_txt}</span></td>"
-            f"<td class='td-num'><span class='lvl lvl-tgt'>{t_txt}</span></td>"
-            f"<td class='td-num'><span class='rr'>{rr_txt}</span></td>"
-            f"<td class='sect'>{_html.escape(sect)}</td>"
-            "</tr>")
+    def _gnum(val) -> str:
+        """RS/Score cell: graded number + little meter, right-aligned. Reuses the
+        table-scoped .gnum / .ppx-meter styling by wrapping in a .ppx-tbl div."""
+        g, w = _grade(val), _pct(val)
+        txt = f"{float(val):.0f}" if isinstance(val, (int, float)) and val == val else "—"
+        return (f"<div class='ppx-tbl' style='text-align:right'><div class='gnum {g}'>{txt}"
+                f"<span class='ppx-meter sm'><span style='width:{w:.0f}%'></span></span></div></div>")
 
-    st.markdown(
-        "<div class='ppx-card'><div class='ppx-card-h'><h3>Today's setups</h3>"
-        f"<span class='s'>{_html.escape(sub)}</span></div>"
-        "<table class='ppx-tbl'><thead><tr>"
-        "<th>Ticker</th><th class='num'>RS</th><th class='num'>Score</th>"
-        "<th>Pattern</th><th class='num'>Entry</th><th class='num'>Stop</th>"
-        "<th class='num'>Target</th><th class='num'>R : R</th><th>Sector</th>"
-        f"</tr></thead><tbody>{''.join(body)}</tbody></table></div>",
-        unsafe_allow_html=True)
+    def _lvl(txt: str, cls: str) -> str:
+        return f"<div class='ppx-tbl' style='text-align:right'><span class='lvl {cls}'>{txt}</span></div>"
 
-    # docked action row: one compact button per ticker (open analysis)
-    st.markdown("<div class='ppx-sub' style='margin:8px 0 4px'>Open analysis ↓</div>",
-                unsafe_allow_html=True)
-    per_row = 6
-    for r0 in range(0, len(rows), per_row):
-        chunk = rows[r0:r0 + per_row]
-        cols = st.columns(per_row)
-        for ci, r in enumerate(chunk):
+    with st.container(border=True, key="ppxcard_setups"):
+        st.markdown(
+            "<div class='ppx-card-h' style='padding:14px 6px'><h3>Today's setups</h3>"
+            f"<span class='s'>{_html.escape(sub)}</span></div>"
+            "<div class='ppx-thr'><span>Ticker</span><span class='num'>RS</span>"
+            "<span class='num'>Score</span><span class='num'>Entry</span>"
+            "<span class='num'>Stop</span><span class='num'>Target</span>"
+            "<span class='num'>R : R</span><span>Sector</span></div>",
+            unsafe_allow_html=True)
+
+        for i, r in enumerate(rows):
             tk = str(r.get("Ticker", ""))
-            sc = r.get("Score")
-            sc_txt = f"{float(sc):.0f}" if isinstance(sc, (int, float)) and sc == sc else "—"
-            with cols[ci]:
-                if st.button(f"{tk} · {sc_txt}", key=f"{key}_pick_{r0}_{ci}_{tk}",
-                             help=f"Analyse {tk}", use_container_width=True):
-                    on_pick(tk)
+            rs, sc, rr_ = r.get("RS"), r.get("Score"), r.get("R:R")
+            sect = str(r.get("Sector") or "—")
+            e_, s_ = r.get("Entry"), r.get("Stop")
+            rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
+            e_txt, s_txt = _money(e_), _money(s_)
+            if (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float))
+                    and s_ == s_ and isinstance(rr_, (int, float)) and rr_ == rr_):
+                t_txt = _money(e_ + rr_ * (e_ - s_))   # Target = Entry + R:R*(Entry-Stop)
+            else:
+                t_txt = "—"
+
+            with st.container(key=f"{key}_row_{i}"):
+                cols = st.columns([2.2, 1, 1, 1.2, 1.2, 1.2, 1, 1.3],
+                                  vertical_alignment="center")
+                with cols[0]:
+                    star_col, tk_col = st.columns([1, 4], vertical_alignment="center")
+                    with star_col:
+                        if st.button("★", key=f"{key}_star_{i}_{tk}",
+                                     type="primary" if tk in watched else "tertiary",
+                                     help="On watchlist" if tk in watched else "Add to watchlist"):
+                            store.add_to_watchlist(tk)
+                            st.toast(f"{tk} added to watchlist")
+                            st.rerun()
+                    with tk_col:
+                        if st.button(tk, key=f"{key}_tk_{i}_{tk}", help=f"Analyse {tk}"):
+                            on_pick(tk)
+                cols[1].markdown(_gnum(rs), unsafe_allow_html=True)
+                cols[2].markdown(_gnum(sc), unsafe_allow_html=True)
+                cols[3].markdown(_lvl(e_txt, "lvl-entry"), unsafe_allow_html=True)
+                cols[4].markdown(_lvl(s_txt, "lvl-stop"), unsafe_allow_html=True)
+                cols[5].markdown(_lvl(t_txt, "lvl-tgt"), unsafe_allow_html=True)
+                cols[6].markdown(
+                    f"<div class='ppx-tbl' style='text-align:right'><span class='rr'>{rr_txt}</span></div>",
+                    unsafe_allow_html=True)
+                cols[7].markdown(
+                    f"<div class='ppx-tbl'><span class='sect'>{_html.escape(sect)}</span></div>",
+                    unsafe_allow_html=True)
 def positions_widget(lives: list | None = None) -> None:
     """Compact OPEN POSITIONS widget: ticker · current R · status pill ·
     entry→target progress meter, with total open R in the footer. Reuses the
