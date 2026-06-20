@@ -33,18 +33,6 @@ if not scan:
 
 theme_ctx = scan.get("theme_ctx") or themes_mod.context_from_list(scan.get("themes", []))
 sector_filter = st.session_state.get("sector_filter")
-top10 = dl.build_top10(scan.get("focus"), scan.get("targets"), sector_filter)
-n_hot = sum(1 for t in scan.get("themes", []) if t.get("rank") and t["rank"] <= max(1, round(0.3 * len(scan.get("themes", [])))))
-sub = f"{len(top10)} names · {n_hot} sectors hot"
-if sector_filter:
-    sub += f" · filtered: {sector_filter}"
-st.markdown(f"<div class='pp-sub'>{sub}</div>", unsafe_allow_html=True)
-_rstate = scan["regime"].state if scan.get("regime") else "neutral"
-st.markdown(
-    f"<div class='pp-exposure'>📊 Suggested portfolio exposure (regime "
-    f"<b>{_rstate.upper()}</b>): <b>{c.regime_exposure(_rstate)}</b> "
-    f"<span class='note'>— a suggestion, not a prescription; you size the trade.</span></div>",
-    unsafe_allow_html=True)
 # Stale-data banner: if the loaded scan isn't from today, say so plainly so old
 # setups are never mistaken for fresh ones (the header dot already flags it).
 _lbl, _col = c.refresh_status(scan)
@@ -56,19 +44,14 @@ if _col != "#00D964":
         f"next scheduled scan: {nxt} ET.</div>", unsafe_allow_html=True)
 c.warning_banner(scan.get("warnings"))
 
-# ---- Top 3 Podium — Tier 1/2 (>=65) qualifying, enriched setups ONLY ----
 focus = scan.get("focus")
 ef_tickers = set()
 if focus is not None and len(focus) and "earnings_flag_active" in focus.columns:
     ef_tickers = set(focus[focus["earnings_flag_active"] == True]["ticker"].astype(str))  # noqa: E712
-podium_rows = dl.build_podium(focus)
-if podium_rows:
-    st.markdown("<div class='pp-section'>Top 3 — best setups today</div>", unsafe_allow_html=True)
-    c.render_podium(podium_rows)              # pads to 3 with "sitting in cash" cards
-else:
-    # Zero qualifying setups: hide the podium entirely (no fake "best setup").
-    st.markdown("<div class='pp-cash-note'>No Pinpoint A+ setups today — "
-                "wait for tomorrow's scan.</div>", unsafe_allow_html=True)
+
+# ---- Sector strength — compact pill row (replaces the treemap) ----
+st.markdown("<div class='pp-section'>Sector strength</div>", unsafe_allow_html=True)
+c.sector_pills(scan.get("themes", []))
 
 
 def detail_fn(tk: str):
@@ -92,90 +75,33 @@ t2 = tiers[tiers["Tier"] == "Good"]
 t3 = tiers[tiers["Tier"] == "Watchlist"]
 _tgt = scan.get("targets")
 scanned = max(len(_tgt) if _tgt is not None else 0, len(tiers))  # ranked universe size
+st.markdown("<div class='pp-section' style='margin-top:28px'>Setups</div>", unsafe_allow_html=True)
 st.markdown(
-    f"<div class='pp-tiercount'>Ranked {scanned} · 🔥 Tier 1: {len(t1)} · "
-    f"⚡ Tier 2: {len(t2)} · 👀 Tier 3: {len(t3)}</div>", unsafe_allow_html=True)
+    f"<div class='pp-tiercount'>Ranked {scanned} · {len(t1)} Elite · "
+    f"{len(t2)} Good · {len(t3)} Watch</div>", unsafe_allow_html=True)
 
 if len(tiers) == 0:
     st.markdown("<div class='pp-empty'>No names scored 50+.</div>", unsafe_allow_html=True)
 
 _ci = 0
 if len(t1):
-    st.markdown("<div class='pp-section'>🔥 Tier 1 — Elite (80-100)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pp-section'>🔥 Elite (80-100)</div>", unsafe_allow_html=True)
     for _, row in t1.iterrows():
         c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
                        ef=str(row.get("Ticker")) in ef_tickers, tier=1); _ci += 1
 if len(t2):
-    st.markdown("<div class='pp-section'>⚡ Tier 2 — Good Setups (65-79)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pp-section'>⚡ Good (65-79)</div>", unsafe_allow_html=True)
     for _, row in t2.iterrows():
         c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
                        ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
 if len(t3):
-    st.markdown("<div class='pp-section'>👀 Tier 3 — Watchlist (50-64)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='pp-section'>•• Watchlist (50-64)</div>", unsafe_allow_html=True)
     pills = "".join(
-        f"<span class='pp-tierpill'>{c._html.escape(str(r.get('Ticker')))}"
+        f"<span class='pp-watch-pill'>{c._html.escape(str(r.get('Ticker')))}"
         f"<b>{r.get('Score'):.0f}</b></span>"
         for _, r in t3.iterrows())
-    st.markdown(f"<div class='pp-tierpills'>{pills}</div>", unsafe_allow_html=True)
-c.scroll_to_card()   # smooth-scroll to a card opened from the podium
-
-# ---- 📌 On your watchlist (up to 5 most recently added) ----
-from pinpoint import watchlist as wl_mod  # noqa: E402
-from pinpoint import earnings_watch as ew_mod  # noqa: E402
-_wl_recent = wl_mod.recent_added(5)
-if _wl_recent:
-    st.markdown("<div class='pp-section'>📌 On your watchlist</div>", unsafe_allow_html=True)
-    _f = scan.get("focus")
-    _fmap = ({str(r["ticker"]).upper(): r for _, r in _f.iterrows()}
-             if _f is not None and len(_f) and "ticker" in _f.columns else {})
-    _ectx = ew_mod.active_ctx()
-    _pill = {"ACTIVE": ("🔥 ACTIVE", "active"), "EARNINGS": ("📈 EARNINGS", "earn"),
-             "WATCH": ("⚡ WATCH", "watch"), "DORMANT": ("💤 DORMANT", "dormant")}
-    _wl_rows = []
-    for e in _wl_recent:
-        tk = e["ticker"]
-        status = wl_mod.compute_status(tk, scan.get("focus"), scan.get("targets"), _ectx)
-        fr = _fmap.get(tk, {})
-        px = fr.get("price")
-        px_txt = f"${px:,.2f}" if isinstance(px, (int, float)) and px == px else "—"
-        ptxt, pcls = _pill[status]
-        _wl_rows.append(
-            f"<div class='pp-row'><span class='tk'>{c._html.escape(tk)}</span>"
-            f"<span class='px'>{px_txt}</span>"
-            f"<span class='pp-pill {pcls}' style='margin-left:auto'>{ptxt}</span></div>")
-    st.markdown("<div style='display:flex;flex-direction:column;gap:6px'>"
-                + "".join(_wl_rows) + "</div>", unsafe_allow_html=True)
-    st.page_link("views/watchlist.py", label="Open Watchlist →")
-
-# ---- Sector / Stocks heatmap (toggleable) ----
-hcol1, hcol2 = st.columns([3, 1.4], vertical_alignment="center")
-with hcol1:
-    st.markdown("<div class='pp-section'>Sector Heatmap</div>", unsafe_allow_html=True)
-with hcol2:
-    hmview = st.radio("Heatmap view", ["Industries", "Stocks"], horizontal=True,
-                      key="hmview", label_visibility="collapsed")
-
-hist = {}
-hp = os.path.join(CONFIG.paths.data_dir, "theme_history.json")
-if os.path.exists(hp):
-    try:
-        hist = json.load(open(hp, encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        hist = {}
-tm_rows = dl.treemap_data(scan.get("themes", []), top10, dl.prior_theme_scores(hist))
-if hmview == "Stocks":
-    c.render_stocks_heatmap(dl.stocks_heatmap(scan.get("targets"), sector_filter))
-else:
-    c.render_treemap(tm_rows)
-# reliable selectbox filter alongside the (visual) heatmap — drives both views
-opts = ["All sectors"] + [r["label"] for r in tm_rows]
-cur = sector_filter if sector_filter in opts else "All sectors"
-sel = st.selectbox("Filter by sector", opts,
-                   index=opts.index(cur), key="sectsel", label_visibility="collapsed")
-new_filter = None if sel == "All sectors" else sel
-if (new_filter or None) != (sector_filter or None):
-    st.session_state["sector_filter"] = new_filter
-    st.rerun()
+    st.markdown(f"<div class='pp-watchpills'>{pills}</div>", unsafe_allow_html=True)
+c.scroll_to_card()   # smooth-scroll to a card opened from a deep-link
 
 # ---- Earnings reactions — both directions (Phase 10 step 8) ----
 universe_tks = set()

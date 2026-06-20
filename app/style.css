@@ -1,19 +1,19 @@
-/* Pinpoint — Phase 7.6 TradingView/Linear aesthetic (Geist + fluoro + dense). */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* Pinpoint — clean TradingView-inspired light UI (Inter + IBM Plex Mono). */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --border: #E5E5E5; --gray: #6B7280; --ink: #0A0A0A; --bg2: #FAFAFA;
-  --up: #00D964; --down: #FF3366; --amber: #FFB800;
-  --pass-bg: #E6FFF1; --pass-fg: #046A38;
-  --fail-bg: #FFE6EC; --fail-fg: #7F0820;
+  --border: #E8ECEF; --gray: #6B7280; --muted: #9CA3AF; --ink: #131722; --bg2: #F8F9FA;
+  --up: #26A69A; --down: #EF5350; --blue: #2962FF; --amber: #F59E0B; --purple: #7C3AED;
+  --pass-bg: #DCFCE7; --pass-fg: #16A34A;
+  --fail-bg: #FEE2E2; --fail-fg: #DC2626;
 }
 
 html, body, [class*="css"], .stApp, .stMarkdown, input, textarea, button, select {
-  font-family: 'Geist', system-ui, -apple-system, sans-serif !important;
+  font-family: 'Inter', -apple-system, system-ui, sans-serif !important;
 }
-.stApp { background: #FFFFFF; }
-.block-container { max-width: 1120px; padding: 1.4rem 1.5rem 4rem; }
-.mono, .pp-num { font-family: 'Geist Mono', ui-monospace, monospace !important;
+.stApp { background: #FFFFFF; color: var(--ink); }
+.block-container { max-width: 1200px; padding: 1rem 2rem 4rem; }
+.mono, .pp-num { font-family: 'IBM Plex Mono', ui-monospace, monospace !important;
   font-variant-numeric: tabular-nums; }
 
 /* clean canvas */
@@ -311,3 +311,104 @@ div[class*="st-key-top_refresh"] button { width:100%; white-space:nowrap; }
 div[class*="st-key-trade1_"] button { background:#16A34A!important; border-color:#16A34A!important; color:#fff!important; }
 div[class*="st-key-trade2_"] button { background:#F59E0B!important; border-color:#F59E0B!important; color:#111!important; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
+
+/* ============================================================
+   REDESIGN — clean TradingView-inspired light UI
+   ============================================================ */
+.pp-section, .pp-section-header {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gray); margin: 24px 0 8px;
+}
+.pp-mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+
+/* Regime pill (header) */
+.pp-regime-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 12px;
+  border-radius:20px; font-size:12px; font-weight:600; }
+.pp-regime-pill .dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+.pp-regime-bull    { background:#DCFCE7; color:#16A34A; }
+.pp-regime-neutral { background:#FEF9C3; color:#CA8A04; }
+.pp-regime-bear    { background:#FEE2E2; color:#DC2626; }
+.pp-regime-sub { color:var(--muted); font-size:11px; font-weight:500; margin-left:4px; }
+
+/* Badges */
+.pp-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px;
+  font-weight:600; font-family:'IBM Plex Mono',monospace; }
+.pp-badge-rs     { background:#F3F0FF; color:#7C3AED; }
+.pp-badge-score  { background:#EFF6FF; color:#2962FF; }
+.pp-badge-sector { background:#F8F9FA; color:#6B7280; border:1px solid #E8ECEF;
+  font-family:'Inter',sans-serif; font-weight:500; }
+
+/* Weekend banner — compact single line */
+.pp-weekend { background:#EFF6FF; border:none; border-left:3px solid #2962FF;
+  border-radius:0 6px 6px 0; padding:8px 14px; color:#1D4ED8; font-size:13px; margin:6px 0 14px; }
+
+/* Tier count line */
+.pp-tiercount { font-size:12px; color:var(--gray); font-family:'IBM Plex Mono',monospace;
+  margin:2px 0 14px; }
+
+/* SETUP CARDS — restyle the existing .pp-row into a clean card */
+.pp-row { display:flex; align-items:center; gap:12px; padding:14px 18px; height:auto !important;
+  background:#FFFFFF; border:1px solid #E8ECEF; border-left:3px solid #E8ECEF;
+  border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); margin-bottom:10px; flex-wrap:wrap; }
+.pp-row .tk { width:auto !important; } .pp-row .px { width:auto !important; } .pp-row .sect { width:auto !important; }
+.pp-row:hover { border-color:#D6DBDF; }
+.pp-row.tier1 { border-left-color:#2962FF; }
+.pp-row.tier2 { border-left-color:#F59E0B; }
+.pp-row .tk { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:16px; color:var(--ink); }
+.pp-row .px { font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--ink); }
+.pp-row .px .chg.up { color:var(--up); } .pp-row .px .chg.down { color:var(--down); }
+.pp-row .score { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;
+  background:#EFF6FF; color:#2962FF; padding:2px 8px; border-radius:4px; }
+.pp-row .score.e { background:#EFF6FF; color:#2962FF; }
+.pp-row .score.g { background:#FEF3C7; color:#B45309; }
+.pp-row .pat { font-size:13px; color:#6B7280; flex:1; min-width:120px; }
+.pp-row .sect { font-size:11px; color:#6B7280; background:#F8F9FA; border:1px solid #E8ECEF;
+  padding:2px 8px; border-radius:4px; margin-left:auto; }
+.pp-row .plan { font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink);
+  width:100%; padding-top:8px; margin-top:4px; border-top:1px solid #E8ECEF; }
+.pp-row .plan b.e { color:#2962FF; } .pp-row .plan b.x { color:#EF5350; }
+.pp-row .plan b.t { color:#26A69A; }
+.pp-rs { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:11px;
+  background:#F3F0FF; color:#7C3AED; padding:2px 8px; border-radius:4px; }
+
+/* Sector pills — compact single row */
+.pp-sectors { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 8px; }
+.pp-sector-pill { display:inline-flex; align-items:center; gap:4px; padding:4px 10px;
+  border-radius:16px; font-size:11px; font-weight:500; font-family:'IBM Plex Mono',monospace; }
+.pp-sector-pill.s4 { background:#26A69A; color:#FFFFFF; }
+.pp-sector-pill.s3 { background:#E8F5F4; color:#26A69A; }
+.pp-sector-pill.s2 { background:#F8F9FA; color:#6B7280; border:1px solid #E8ECEF; }
+.pp-sector-pill.s1 { background:#FEF2F2; color:#EF5350; }
+
+/* Watchlist pills (Tier 3) */
+.pp-tierpills, .pp-watchpills { display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 8px; }
+.pp-watch-pill, .pp-tierpill { display:inline-flex; align-items:center; gap:6px; padding:6px 12px;
+  background:#F8F9FA; border:1px solid #E8ECEF; border-radius:6px; font-size:12px;
+  color:var(--ink); cursor:default; }
+.pp-watch-pill b, .pp-tierpill b { font-family:'IBM Plex Mono',monospace; color:#6B7280; font-weight:600; }
+.pp-watch-pill:hover, .pp-tierpill:hover { background:#EFF6FF; border-color:#2962FF; }
+
+/* Open positions widget */
+.pp-pos { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:12px 16px;
+  background:#F8F9FA; border:1px solid #E8ECEF; border-radius:8px; margin-bottom:8px; }
+.pp-pos .tk { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:15px; color:var(--ink); }
+.pp-pos .m { color:var(--gray); font-size:12px; font-family:'IBM Plex Mono',monospace; }
+.pp-pos .hold { margin-left:auto; font-size:11px; letter-spacing:.04em; color:var(--muted); text-transform:uppercase; }
+.pp-pos .r { font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:14px; }
+.pp-pos .r.green { color:#26A69A; } .pp-pos .r.amber { color:#F59E0B; }
+.pp-pos .r.blue { color:#2962FF; } .pp-pos .r.red { color:#EF5350; }
+.pp-pos-alert { background:#FEF9C3; color:#854D0E; border-radius:8px; padding:6px 12px; font-size:13px; margin:3px 0; }
+.pp-pos-alert.red { background:#FEE2E2; color:#DC2626; }
+
+/* Primary (Trade This / Refresh) */
+.stButton button[kind="primary"] { background:#2962FF !important; border:none !important;
+  border-radius:6px !important; font-size:13px !important; font-weight:500 !important; color:#fff !important; }
+.stButton button[kind="primary"]:hover { background:#1D4ED8 !important; }
+
+/* Sidebar */
+[data-testid="stSidebar"] { background:#F8F9FA; border-right:1px solid #E8ECEF; }
+[data-testid="stSidebar"] .stMarkdown { font-size:13px; }
+
+/* Header divider */
+.pp-header { border-bottom:1px solid #E8ECEF; padding-bottom:10px; }
+.pp-h1 { font-size:28px; font-weight:600; color:#131722; }

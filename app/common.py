@@ -227,11 +227,14 @@ def page_header(title: str, subtitle: str = None, show_refresh: bool = True) -> 
     the same scan as the sidebar button, with a live progress bar."""
     scan = st.session_state.get("scan")
     label, color = refresh_status(scan)
+    reg = scan.get("regime") if scan else None
+    state = getattr(reg, "state", None) if reg else None
+    regime_html = regime_pill_html(state) if state else ""
     hdr, btn = st.columns([8, 1], vertical_alignment="center")
     with hdr:
         st.markdown(
             f"<div class='pp-header'><div class='pp-h1'>{title}</div>"
-            f"<div class='pp-headmeta'>{heat_badge_html()}"
+            f"<div class='pp-headmeta'>{regime_html}{heat_badge_html()}"
             f"<span class='pp-refresh'><span class='pp-rdot' style='background:{color}'></span>"
             f"Last refreshed: {_html.escape(label)}</span></div></div>",
             unsafe_allow_html=True)
@@ -241,6 +244,38 @@ def page_header(title: str, subtitle: str = None, show_refresh: bool = True) -> 
             run_refresh()
     if subtitle:
         st.markdown(f"<div class='pp-sub'>{subtitle}</div>", unsafe_allow_html=True)
+
+
+def sector_pills(themes: list) -> None:
+    """Compact single-row sector pills (replaces the big treemap). Color intensity
+    by the theme's RS-like score: strong green / light green / grey / red."""
+    if not themes:
+        return
+    def _cls(score):
+        try:
+            s = float(score)
+        except (TypeError, ValueError):
+            return "s2"
+        return "s4" if s >= 80 else "s3" if s >= 60 else "s1" if s < 40 else "s2"
+    pills = []
+    for t in sorted(themes, key=lambda x: x.get("rank") or 999)[:12]:
+        name = t.get("theme") or t.get("name") or ""
+        score = t.get("score")
+        arrow = "▲" if isinstance(score, (int, float)) and score and score >= 0 else ""
+        sc = f" {score:.0f}" if isinstance(score, (int, float)) and score == score else ""
+        pills.append(f"<span class='pp-sector-pill {_cls(score)}'>"
+                     f"{_html.escape(str(name))} {arrow}{sc}</span>")
+    st.markdown("<div class='pp-sectors'>" + "".join(pills) + "</div>", unsafe_allow_html=True)
+
+
+def regime_pill_html(state: str) -> str:
+    """TradingView-style regime pill with a colored dot + exposure subtitle."""
+    st_l = str(state or "neutral").lower()
+    cls = ("pp-regime-bull" if st_l in ("bull", "neutral-bull")
+           else "pp-regime-bear" if st_l in ("bear", "very-bear") else "pp-regime-neutral")
+    return (f"<span class='pp-regime-pill {cls}'><span class='dot'></span>"
+            f"{_html.escape(str(state).upper())}"
+            f"<span class='pp-regime-sub'>{regime_exposure(st_l)}</span></span>")
 
 
 def weekend_mode_active() -> bool:
@@ -760,7 +795,8 @@ def rs_chip_html(rs) -> str:
 _EF_BADGE = "<span class='pp-ef'>📈 Earnings Flag</span>"
 
 
-def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: bool = False) -> str:
+def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: bool = False,
+              tier: int = None) -> str:
     tk = _html.escape(str(row.get("Ticker", "")))
     pat = _html.escape(str(row.get("Pattern") or "—"))
     sect = _html.escape(str(row.get("Sector") or ""))
@@ -782,15 +818,21 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
     row_cls = "pp-row"
     if isinstance(score, (int, float)) and score == score:
         s_cls = "e" if score >= 80 else "g" if score >= 65 else "w" if score >= 50 else ""
-        if score >= 80:
-            row_cls = "pp-row tier1"
-    # compact glance trio — entry / exit(stop) / R:R, or "—" when no measured plan
+    if tier == 1 or (isinstance(score, (int, float)) and score == score and score >= 80):
+        row_cls = "pp-row tier1"
+    elif tier == 2 or (isinstance(score, (int, float)) and score == score and score >= 65):
+        row_cls = "pp-row tier2"
+    # full E · X · T · R:R plan row (colored), or "—" when no measured plan
     e, s_, rr_ = row.get("Entry"), row.get("Stop"), row.get("R:R")
     if (isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_):
         rr_txt2 = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
+        risk = e - s_
+        t_txt = (f" · T <b class='t'>${e + rr_ * risk:,.2f}</b>"
+                 if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else "")
         sh, _dr = shares_for(e, s_)
         sh_txt = f" · {sh} sh" if sh > 0 else ""
-        plan_txt = f"E ${e:,.2f} · X ${s_:,.2f} · {rr_txt2}{sh_txt}"
+        plan_txt = (f"E <b class='e'>${e:,.2f}</b> · X <b class='x'>${s_:,.2f}</b>"
+                    f"{t_txt} · {rr_txt2}{sh_txt}")
     else:
         plan_txt = "—"
     plan_html = f"<span class='plan'>{plan_txt}</span>"
@@ -825,7 +867,7 @@ def compact_card(row: dict, detail_fn, key: str, ef: bool = False, tier: int = N
     chg = ((closes[-1] / closes[-2] - 1.0) * 100.0) if len(closes) >= 2 else None
 
     c1, cstar, c2 = st.columns([22, 1, 1], vertical_alignment="center")
-    c1.markdown(_row_html(row, spark, price, chg, ef=ef), unsafe_allow_html=True)
+    c1.markdown(_row_html(row, spark, price, chg, ef=ef, tier=tier), unsafe_allow_html=True)
     with cstar:
         star_button(tk, key=f"row_{key}")
     if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
