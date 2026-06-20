@@ -108,6 +108,53 @@ def save_user_settings(settings: dict) -> None:
         logger.warning("user settings write failed: %s", exc)
 
 
+# ---------------------------------------------------------------------------
+# Open positions (data/store/positions.json) — the SAME file monitor.py reads
+# for its 5-minute alert cron. Field names here must stay compatible with it
+# (ticker / entry / stop / shares / trail_mode / status).
+# ---------------------------------------------------------------------------
+def _positions_path() -> str:
+    return os.path.join(CONFIG.paths.store_dir, "positions.json")
+
+
+def load_positions() -> list[dict]:
+    path = _positions_path()
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("positions read failed: %s", exc)
+        return []
+
+
+def open_positions() -> list[dict]:
+    """Positions whose status is not closed/resolved (mirrors monitor.py)."""
+    return [p for p in load_positions()
+            if str(p.get("status", "open")).lower() not in ("closed", "resolved")]
+
+
+def add_position(entry: dict) -> list[dict]:
+    """Append one position (atomic) to positions.json. Dedups an existing OPEN
+    row for the same ticker (re-placing overwrites it)."""
+    positions = [p for p in load_positions()
+                 if not (str(p.get("ticker", "")).upper() == str(entry.get("ticker", "")).upper()
+                         and str(p.get("status", "open")).lower() not in ("closed", "resolved"))]
+    positions.append(entry)
+    path = _positions_path()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(positions, f, indent=2)
+        os.replace(tmp, path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("positions write failed: %s", exc)
+    return positions
+
+
 def add_to_watchlist(ticker: str) -> list[str]:
     from . import watchlist as wl_mod
     return wl_mod.add(ticker)

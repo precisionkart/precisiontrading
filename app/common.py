@@ -808,10 +808,11 @@ def _row_html(row: dict, spark: str, price: float, chg: Optional[float], ef: boo
             f"</div>")
 
 
-def compact_card(row: dict, detail_fn, key: str, ef: bool = False) -> None:
+def compact_card(row: dict, detail_fn, key: str, ef: bool = False, tier: int = None) -> None:
     """One-row compact stock card (ticker/price/sparkline/RS/score/pattern/R:R/
     sector) with an inline expand to the detail view. Multiple can be open.
-    `ef` shows the earnings-flag badge."""
+    `ef` shows the earnings-flag badge. `tier` (1 or 2) adds a "📋 Trade This"
+    button that hands the setup to the Position Sizer."""
     import dashboard_logic as dl
     tk = str(row.get("Ticker"))
     open_set = st.session_state.setdefault("open_cards", set())
@@ -830,10 +831,155 @@ def compact_card(row: dict, detail_fn, key: str, ef: bool = False) -> None:
     if c2.button("⌃" if is_open else "⌄", key=f"exp_{key}"):
         (open_set.discard if is_open else open_set.add)(tk)
         st.rerun()
+    # "Trade This" — only for Tier 1/2 cards with a real enriched setup.
+    entry, stop = _num_or_none(row.get("Entry")), _num_or_none(row.get("Stop"))
+    if tier in (1, 2) and entry and stop:
+        bkey = f"trade{tier}_{key}"          # key prefix drives the green/amber CSS
+        if st.button("📋 Trade This", key=bkey, use_container_width=True,
+                     type="primary" if tier == 1 else "secondary"):
+            st.session_state["active_trade"] = _build_active_trade(row, price)
+            st.switch_page("views/position_sizer.py")
     if is_open:
         pr = detail_fn(tk)
         if pr is not None:
             render_detail_inline(pr)
+
+
+def _num_or_none(v):
+    try:
+        f = float(v)
+        return f if f == f and f > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _build_active_trade(row: dict, current_price: float) -> dict:
+    """Snapshot a dashboard tier row into the Trade-Ticket payload."""
+    scan = st.session_state.get("scan") or {}
+    reg = scan.get("regime")
+    state = getattr(reg, "state", None) or (reg.get("state") if isinstance(reg, dict) else "neutral")
+    return {
+        "ticker": str(row.get("Ticker")), "sector": row.get("Sector") or "",
+        "score": _num_or_none(row.get("Score")), "rs": _num_or_none(row.get("RS")),
+        "pattern": row.get("Pattern") or "", "reward_risk": _num_or_none(row.get("R:R")),
+        "entry": _num_or_none(row.get("Entry")), "stop": _num_or_none(row.get("Stop")),
+        "regime": str(state), "current_price": current_price if current_price == current_price else None,
+    }
+
+
+def trade_recommendation(active: dict, current_price=None, confidence=None) -> dict:
+    """GO / WAIT / SKIP decision for a setup (Change 3 logic). Returns
+    {level, title, css, checks:[(ok,text)]}."""
+    state = str(active.get("regime") or "neutral").lower()
+    bearish = state in ("bear", "very-bear")
+    score = active.get("score") or 0.0
+    rs = active.get("rs") or 0.0
+    rr = active.get("reward_risk") or 0.0
+    entry = active.get("entry") or 0.0
+    pattern = bool(active.get("pattern"))
+    cp = current_price if current_price is not None else active.get("current_price")
+
+    checks = [
+        (not bearish, f"Regime {state.upper()}" + (" — longs throttled" if bearish else "")),
+        (rs >= 90, f"RS {rs:.0f}" + (" (top 10%)" if rs >= 90 else " (< 90)")),
+        (pattern, f"Pattern: {active.get('pattern') or 'none'}"),
+        (rr >= 5.0, f"R:R {rr:.1f}:1" + (" (≥ 5:1)" if rr >= 5 else " (< 5:1)")),
+        (score >= 75, f"Score {score:.1f}" + (" (Elite)" if score >= 80 else
+                                              " (Good)" if score >= 65 else " (low)")),
+        (bool(active.get("sector")), f"Sector: {active.get('sector') or '—'}"),
+    ]
+
+    if bearish or rs < 85 or rr < 3.0 or score < 50:
+        return {"level": "skip", "title": "❌ SKIP THIS TRADE", "css": "skip", "checks": checks}
+    chasing = bool(cp and entry and cp > entry * 1.02)
+    if chasing or (confidence is not None and confidence < 0.6):
+        why = ("price has run past the trigger (chasing)" if chasing
+               else "pattern confidence is low")
+        return {"level": "wait", "title": "🕐 WAIT FOR BETTER ENTRY", "css": "wait",
+                "checks": checks, "note": why}
+    if (not bearish) and score >= 75 and rs >= 90 and rr >= 5.0 and pattern:
+        return {"level": "take", "title": "✅ TAKE THIS TRADE", "css": "take", "checks": checks}
+    if (not bearish) and score >= 65 and rs >= 85 and rr >= 5.0:
+        return {"level": "caution", "title": "⚠️ CONSIDER WITH CAUTION", "css": "caution",
+                "checks": checks}
+    return {"level": "caution", "title": "⚠️ REVIEW BEFORE TRADING", "css": "caution",
+            "checks": checks}
+
+
+def _position_live(p: dict) -> dict:
+    """Current price + 10/20 EMA for an open position, from the OHLCV cache only
+    (no live calls — keeps the dashboard fast). Adds R multiple + status flags."""
+    out = dict(p)
+    df = ohlcv_mod.fetch_daily(str(p.get("ticker", "")).upper(), cache_only=True).df
+    cp = ema10 = ema20 = None
+    if df is not None and len(df):
+        d = ohlcv_mod.add_moving_averages(df)
+        last = d.iloc[-1]
+        cp = float(last["Close"])
+        ema10 = float(last.get("EMA10", float("nan")))
+        ema20 = float(last.get("EMA20", float("nan")))
+    entry, stop = p.get("entry"), p.get("stop")
+    r_mult = None
+    if cp is not None and entry and stop and (entry - stop) > 0:
+        r_mult = (cp - entry) / (entry - stop)
+    out.update({"price": cp, "ema10": ema10, "ema20": ema20, "r_mult": r_mult})
+    return out
+
+
+def open_positions_panel() -> None:
+    """Dashboard OPEN POSITIONS widget (Change 5). Hidden when there are none."""
+    positions = store.open_positions()
+    if not positions:
+        return
+    lives = [_position_live(p) for p in positions]
+    st.markdown(f"<div class='pp-section'>📊 Open positions ({len(lives)})</div>",
+                unsafe_allow_html=True)
+
+    # alert banners
+    alerts = []
+    for lv in lives:
+        tk = lv.get("ticker"); cp = lv.get("price"); ema10 = lv.get("ema10")
+        stop = lv.get("stop"); r = lv.get("r_mult")
+        if cp is not None and ema10 is not None and ema10 == ema10 and cp < ema10:
+            alerts.append(f"⚠️ {tk} below 10 EMA — review exit")
+        if cp is not None and stop and stop > 0 and cp <= stop * 1.02:
+            alerts.append(f"🔴 {tk} near stop — monitor closely")
+        if r is not None and r >= 3.0:
+            alerts.append(f"🚀 {tk} at {r:.1f}R — consider trimming 20%")
+    for a in alerts:
+        cls = "pp-pos-alert red" if a.startswith("🔴") else "pp-pos-alert"
+        st.markdown(f"<div class='{cls}'>{_html.escape(a)}</div>", unsafe_allow_html=True)
+
+    def _money(x):
+        return f"${float(x):,.2f}" if isinstance(x, (int, float)) and x == x else "—"
+
+    rows = []
+    for lv in lives:
+        tk = _html.escape(str(lv.get("ticker", "")))
+        cp, ema10, stop, entry = lv.get("price"), lv.get("ema10"), lv.get("stop"), lv.get("entry")
+        r = lv.get("r_mult")
+        if r is None:
+            badge, rcls = "—", "blue"
+        elif r >= 3:
+            badge, rcls = f"+{r:.1f}R ✅", "green"
+        elif r >= 1:
+            badge, rcls = f"+{r:.1f}R 🟡", "amber"
+        elif r >= 0:
+            badge, rcls = f"+{r:.1f}R", "blue"
+        else:
+            badge, rcls = f"{r:.1f}R ❌", "red"
+        below = (cp is not None and ema10 is not None and ema10 == ema10 and cp < ema10)
+        hold = "BELOW 10 EMA" if below else "HOLDING"
+        rows.append(
+            f"<div class='pp-pos'>"
+            f"<span class='tk'>{tk}</span>"
+            f"<span class='m'>Entry {_money(entry)}</span>"
+            f"<span class='m'>Cur {_money(cp)}</span>"
+            f"<span class='r {rcls}'>{badge}</span>"
+            f"<span class='m'>Stop {_money(stop)}</span>"
+            f"<span class='m'>10 EMA {_money(ema10)}</span>"
+            f"<span class='hold'>{hold}</span></div>")
+    st.markdown("<div class='pp-pos-wrap'>" + "".join(rows) + "</div>", unsafe_allow_html=True)
 
 
 def render_detail_inline(pr) -> None:

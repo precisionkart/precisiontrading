@@ -19,6 +19,7 @@ scan = st.session_state.get("scan")
 
 c.page_header("Today")
 c.weekend_banner()
+c.open_positions_panel()        # OPEN POSITIONS widget (hidden when none)
 if not scan:
     if CLOUD:
         msg = "No published scan found (data/latest_scan.json)."
@@ -103,12 +104,12 @@ if len(t1):
     st.markdown("<div class='pp-section'>🔥 Tier 1 — Elite (80-100)</div>", unsafe_allow_html=True)
     for _, row in t1.iterrows():
         c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                       ef=str(row.get("Ticker")) in ef_tickers); _ci += 1
+                       ef=str(row.get("Ticker")) in ef_tickers, tier=1); _ci += 1
 if len(t2):
     st.markdown("<div class='pp-section'>⚡ Tier 2 — Good Setups (65-79)</div>", unsafe_allow_html=True)
     for _, row in t2.iterrows():
         c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                       ef=str(row.get("Ticker")) in ef_tickers); _ci += 1
+                       ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
 if len(t3):
     st.markdown("<div class='pp-section'>👀 Tier 3 — Watchlist (50-64)</div>", unsafe_allow_html=True)
     pills = "".join(
