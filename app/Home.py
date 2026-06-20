@@ -38,25 +38,23 @@ scan = st.session_state["scan"]
 
 dashboard = st.Page("views/dashboard.py", title="Dashboard",
                     icon=":material/space_dashboard:", default=True)
-mypicks = st.Page("views/my_picks.py", title="My Picks", icon=":material/insights:")
-fullscan = st.Page("views/full_scan.py", title="Full Scan", icon=":material/search:")
-earnings = st.Page("views/earnings_watch_page.py", title="Earnings Watch",
-                   icon=":material/trending_up:")
-premarket = st.Page("views/premarket.py", title="Pre-Market Briefing",
-                    icon=":material/wb_twilight:")
 watchlist = st.Page("views/watchlist.py", title="Watchlist", icon=":material/star:")
+# "My Picks" renamed to "Stock Analysis" (same page, new label/icon).
+analysis = st.Page("views/my_picks.py", title="Stock Analysis", icon=":material/search:")
+sizer = st.Page("views/position_sizer.py", title="Position Sizer",
+                icon=":material/calculate:")
 settings = st.Page("views/settings.py", title="Settings", icon=":material/settings:")
-nav = st.navigation([dashboard, mypicks, fullscan, premarket, earnings, watchlist, settings],
+# Full Scan / Pre-Market / Earnings Watch / Backtest are kept in app/views/ but
+# removed from the nav to keep the sidebar focused on the 5 core pages.
+nav = st.navigation([dashboard, watchlist, analysis, sizer, settings],
                     position="hidden")
 
 with st.sidebar:
     c.sidebar_logo()
     st.page_link(dashboard)
-    st.page_link(mypicks)
-    st.page_link(fullscan)
-    st.page_link(premarket)
-    st.page_link(earnings)
     st.page_link(watchlist)
+    st.page_link(analysis)
+    st.page_link(sizer)
     st.page_link(settings)
     c.sidebar_footer(scan, CLOUD)
 

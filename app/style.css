@@ -271,4 +271,17 @@ div[class*="st-key-top_refresh"] button { width:100%; white-space:nowrap; }
 .pp-row .plan { font-family:'Geist Mono',monospace; font-size:11px; color:var(--gray); font-variant-numeric:tabular-nums; white-space:nowrap; }
 .pp-stale { background:rgba(255,138,0,0.10); color:#B26A00; border:1px solid rgba(255,138,0,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
 .pp-weekend { background:rgba(59,130,246,0.10); color:#1D4ED8; border:1px solid rgba(59,130,246,0.30); border-radius:8px; padding:8px 12px; font-size:13px; margin:6px 0 4px; }
+.pp-bt-card { background:var(--card,#fff); border:1px solid rgba(0,0,0,0.08); border-radius:10px; padding:12px 14px; }
+.pp-bt-lbl { font-family:'Geist Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gray); }
+.pp-bt-val { font-size:28px; font-weight:700; line-height:1.2; margin-top:2px; }
+/* position sizer */
+.pp-ps-card { background:var(--card,#fff); border:1px solid rgba(0,0,0,0.08); border-radius:12px; padding:14px 16px; margin:6px 0; }
+.pp-ps-h { font-size:17px; font-weight:700; }
+.pp-ps-sub { font-family:'Geist Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--gray); margin:12px 0 4px; }
+.pp-ps-grid { display:grid; grid-template-columns:auto 1fr; gap:4px 18px; align-items:baseline; }
+.pp-ps-grid span { color:var(--gray); font-size:13px; }
+.pp-ps-grid b { text-align:right; font-size:15px; font-variant-numeric:tabular-nums; }
+.pp-ps-grid b.big { font-size:22px; font-weight:800; }
+.pp-ps-grid b.red { color:#DC2626; }
+.pp-ps-grid b.green { color:#16A34A; }
 .pp-hot { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10px; font-weight:600; color:var(--up); border:1px solid var(--up); }
