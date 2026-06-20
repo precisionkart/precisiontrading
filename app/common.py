@@ -296,9 +296,64 @@ def weekend_banner() -> None:
         "Setups valid at Monday open.</div>", unsafe_allow_html=True)
 
 
+_SIDEBAR_CSS = """
+<style>
+/* ---- Pinpoint dark rail (mockup) — scoped to the sidebar only ---- */
+section[data-testid="stSidebar"]{
+  background:#0B0E1A !important; border-right:1px solid rgba(255,255,255,.06);
+}
+section[data-testid="stSidebar"] *{color:#C7CAD6}
+section[data-testid="stSidebar"] .block-container{padding-top:14px}
+/* brand */
+.ppx-rail-brand{display:flex;align-items:center;gap:11px;padding:6px 6px 16px}
+.ppx-rail-brand .mark{width:30px;height:30px;border-radius:9px;
+  background:linear-gradient(135deg,#6366F1,#4F46E5);display:grid;place-items:center;flex:none}
+.ppx-rail-brand .mark span{width:10px;height:10px;border-radius:99px;background:#fff;
+  box-shadow:0 0 0 3px rgba(255,255,255,.25)}
+.ppx-rail-brand b{font-family:'Space Grotesk','Inter',sans-serif;font-weight:700;
+  color:#fff;font-size:17px;letter-spacing:-.01em}
+/* nav page-links → rail items */
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]{
+  border-radius:9px;padding:9px 11px;margin:1px 0;font-weight:500}
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:hover{
+  background:rgba(255,255,255,.05)}
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"][aria-current="page"],
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"].active{
+  background:#171C2E}
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] p{
+  color:#C7CAD6 !important;font-size:13.5px}
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"]:hover p,
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"][aria-current="page"] p{
+  color:#fff !important}
+section[data-testid="stSidebar"] a[data-testid="stPageLink-NavLink"] svg{color:#6E7488}
+/* regime mini-box */
+.ppx-rail-regime{display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;
+  background:rgba(22,160,106,.12);border:1px solid rgba(22,160,106,.22);margin:6px 2px 12px}
+.ppx-rail-regime .dot{width:8px;height:8px;border-radius:99px;background:#22C77E;
+  box-shadow:0 0 0 3px rgba(34,199,126,.2);flex:none}
+.ppx-rail-regime small{color:#7FD7A8;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  font-weight:600;display:block}
+.ppx-rail-regime b{color:#fff;font-family:'Space Grotesk','Inter',sans-serif;font-size:14px}
+.ppx-rail-regime.bear{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.22)}
+.ppx-rail-regime.bear .dot{background:#E5484D;box-shadow:0 0 0 3px rgba(229,72,77,.2)}
+.ppx-rail-regime.bear small{color:#F0A6A8}
+/* user footer */
+.ppx-rail-who{display:flex;align-items:center;gap:10px;padding:4px 6px 2px}
+.ppx-rail-who .av{width:30px;height:30px;border-radius:99px;background:#2A3047;color:#C7CAD6;
+  display:grid;place-items:center;font-weight:600;font-size:12px;flex:none}
+.ppx-rail-who b{color:#fff;font-size:13px;display:block;line-height:1.2}
+.ppx-rail-who small{color:#6E7488;font-size:11px}
+/* dim the divider streamlit draws */
+section[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,.07)}
+</style>
+"""
+
+
 def sidebar_logo() -> None:
-    st.markdown("<div class='pp-logo'>Pin<span class='tick'>point</span></div>",
-                unsafe_allow_html=True)
+    st.markdown(_SIDEBAR_CSS, unsafe_allow_html=True)
+    st.markdown(
+        "<div class='ppx-rail-brand'><div class='mark'><span></span></div><b>Pinpoint</b></div>",
+        unsafe_allow_html=True)
 
 
 def _n(df) -> int:
@@ -306,19 +361,28 @@ def _n(df) -> int:
 
 
 def sidebar_footer(scan, cloud: bool) -> None:
-    """Sidebar bottom: regime dot + 'Data as of HH:MM' + icon-only refresh."""
-    # Show the post-refresh success toast (survives the st.rerun via session).
+    """Sidebar bottom (mockup rail): regime mini-box + user identity + the
+    icon-only refresh. Nav stays Streamlit page-links above this."""
     msg = st.session_state.pop("_refresh_toast", None)
     if msg:
         st.toast(msg, icon="✅")
-    st.markdown("<div class='pp-side-foot'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
     if scan:
-        color = _REGIME_COLOR.get(scan["regime"].state, "#6B7280")
-        st.markdown(f"<div class='pp-regime'><span class='pp-dot' style='background:{color}'>"
-                    f"</span>{scan['regime'].state.upper()}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='pp-asof'>Data as of {_html.escape(scan.get('as_of') or '—')}</div>",
-                    unsafe_allow_html=True)
-    if st.button("↻", key="side_refresh", help="Refresh scan (live Massive)"):
+        state = scan["regime"].state
+        is_bear = state in ("bear", "very-bear")
+        label = "Bull · risk-on" if state in ("bull", "neutral-bull") else \
+                "Bear · risk-off" if is_bear else state.title()
+        cls = " bear" if is_bear else ""
+        st.markdown(
+            f"<div class='ppx-rail-regime{cls}'><span class='dot'></span>"
+            f"<div><small>Market regime</small><b>{_html.escape(label)}</b></div></div>",
+            unsafe_allow_html=True)
+    st.markdown(
+        "<div class='ppx-rail-who'><div class='av'>DC</div>"
+        "<div><b>Dylan</b><small>Precision Trading</small></div></div>",
+        unsafe_allow_html=True)
+    if st.button("↻ Refresh scan", key="side_refresh", help="Refresh scan (live Massive)",
+                 use_container_width=True):
         run_refresh(cloud)
 
 

@@ -47,8 +47,27 @@ _CSS = """
 .ppx-up{color:var(--ppx-bull)!important}.ppx-dn{color:var(--ppx-bear)!important}.ppx-flat{color:var(--ppx-muted)!important}
 
 /* section headers */
-.ppx-h{font-family:var(--ppx-disp);font-weight:600;font-size:17px;color:var(--ppx-ink);letter-spacing:-.01em;margin:26px 0 2px}
-.ppx-sub{font-family:var(--ppx-mono);font-size:12px;color:var(--ppx-muted);margin:0 0 12px}
+.ppx-h{font-family:var(--ppx-disp);font-weight:600;font-size:17px;color:var(--ppx-ink);letter-spacing:-.01em;margin:34px 0 2px}
+.ppx-sub{font-family:var(--ppx-mono);font-size:12px;color:var(--ppx-muted);margin:0 0 14px}
+
+/* setups table (mockup .tbl) */
+.ppx-tbl{width:100%;border-collapse:collapse}
+.ppx-tbl thead th{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600;text-align:left;padding:10px 16px;border-bottom:1px solid var(--ppx-line)}
+.ppx-tbl thead th.num{text-align:right}
+.ppx-tbl tbody td{padding:12px 16px;border-bottom:1px solid var(--ppx-line);vertical-align:middle}
+.ppx-tbl tbody tr:last-child td{border-bottom:0}
+.ppx-tbl tbody tr.lead-row{background:var(--ppx-brand-soft)}
+.ppx-tbl .cell-tkr{display:flex;align-items:center;gap:11px}
+.ppx-tbl .cell-tkr .star{color:#D6D9E2;flex:none;font-size:14px}
+.ppx-tbl .cell-tkr .star.on{color:var(--ppx-brand)}
+.ppx-tbl .cell-tkr b{font-family:var(--ppx-disp);font-weight:700;font-size:15px;color:var(--ppx-ink);display:block}
+.ppx-tbl .cell-tkr small{display:block;color:var(--ppx-muted);font-size:11.5px;font-weight:500;margin-top:1px}
+.ppx-tbl .gnum{font-family:var(--ppx-mono);font-weight:700;font-size:14px;color:var(--g,var(--ppx-ink));display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.ppx-tbl .gnum .ppx-meter{width:46px}
+.ppx-tbl .td-num{text-align:right}
+.ppx-tbl .pat{font-size:13px;color:var(--ppx-text)}
+.ppx-tbl .sect{font-size:12px;color:var(--ppx-muted);font-weight:500}
+.ppx-tbl .rr{font-family:var(--ppx-mono);font-weight:700;color:var(--ppx-ink);text-align:right}
 
 /* generic card */
 .ppx-card{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
@@ -289,8 +308,79 @@ def sector_ladder(themes: list) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Open positions — compact widget.
+# Today's setups — ranked table (mockup .tbl) + a docked row of ticker buttons.
 # ---------------------------------------------------------------------------
+def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") -> None:
+    """Ranked setups as the mockup's table: Ticker/RS/Score/Pattern/R:R/Sector,
+    with RS & Score meters and a star. `rows` is a list of dicts (Ticker, RS,
+    Score, Pattern, Sector, R:R). The HTML table is display-only (clicks can't
+    fire from raw HTML), so a thin row of ticker buttons is docked beneath for
+    the actual open-analysis action. `on_pick(ticker)` is called on click."""
+    if not rows:
+        st.markdown("<div class='ppx-card'><div class='ppx-card-h'><h3>Today's setups</h3></div>"
+                    "<div style='padding:14px 16px;color:var(--ppx-muted);font-size:13px'>"
+                    "No names scored 50+.</div></div>", unsafe_allow_html=True)
+        return
+
+    sub = f"ranked by score" if n_total is None else f"ranked by score · {n_total} scanned"
+    watched = set(store.load_watchlist()) if hasattr(store, "load_watchlist") else set()
+
+    body = []
+    for i, r in enumerate(rows):
+        tk = str(r.get("Ticker", ""))
+        rs = r.get("RS")
+        sc = r.get("Score")
+        pat = str(r.get("Pattern") or "—")
+        sect = str(r.get("Sector") or "—")
+        rr_ = r.get("R:R")
+        rs_txt = f"{float(rs):.0f}" if isinstance(rs, (int, float)) and rs == rs else "—"
+        sc_txt = f"{float(sc):.0f}" if isinstance(sc, (int, float)) and sc == sc else "—"
+        rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
+        rs_g, sc_g = _grade(rs), _grade(sc)
+        rs_w, sc_w = _pct(rs), _pct(sc)
+        # short pattern as the small sub-label under ticker
+        pat_short = pat.split("·")[0].strip()
+        if len(pat_short) > 16:
+            pat_short = pat_short[:15] + "…"
+        star_on = " on" if tk in watched else ""
+        lead = " lead-row" if i == 0 else ""
+        body.append(
+            f"<tr class='{lead}'>"
+            f"<td><div class='cell-tkr'><span class='star{star_on}'>★</span>"
+            f"<span><b>{_html.escape(tk)}</b><small>{_html.escape(pat_short)}</small></span></div></td>"
+            f"<td class='td-num'><div class='gnum {rs_g}'>{rs_txt}"
+            f"<span class='ppx-meter sm'><span style='width:{rs_w:.0f}%'></span></span></div></td>"
+            f"<td class='td-num'><div class='gnum {sc_g}'>{sc_txt}"
+            f"<span class='ppx-meter sm'><span style='width:{sc_w:.0f}%'></span></span></div></td>"
+            f"<td class='pat'>{_html.escape(pat)}</td>"
+            f"<td class='td-num'><span class='rr'>{rr_txt}</span></td>"
+            f"<td class='sect'>{_html.escape(sect)}</td>"
+            "</tr>")
+
+    st.markdown(
+        "<div class='ppx-card'><div class='ppx-card-h'><h3>Today's setups</h3>"
+        f"<span class='s'>{_html.escape(sub)}</span></div>"
+        "<table class='ppx-tbl'><thead><tr>"
+        "<th>Ticker</th><th class='num'>RS</th><th class='num'>Score</th>"
+        "<th>Pattern</th><th class='num'>R : R</th><th>Sector</th>"
+        f"</tr></thead><tbody>{''.join(body)}</tbody></table></div>",
+        unsafe_allow_html=True)
+
+    # docked action row: one compact button per ticker (open analysis)
+    st.markdown("<div class='ppx-sub' style='margin:8px 0 4px'>Open analysis ↓</div>",
+                unsafe_allow_html=True)
+    per_row = 6
+    for r0 in range(0, len(rows), per_row):
+        chunk = rows[r0:r0 + per_row]
+        cols = st.columns(per_row)
+        for ci, r in enumerate(chunk):
+            tk = str(r.get("Ticker", ""))
+            sc = r.get("Score")
+            sc_txt = f"{float(sc):.0f}" if isinstance(sc, (int, float)) and sc == sc else "—"
+            with cols[ci]:
+                if st.button(f"{tk} · {sc_txt}", key=f"{key}_pick_{r0}_{ci}_{tk}",
+                             help=f"Analyse {tk}", use_container_width=True):
+                    on_pick(tk)
 def positions_widget(lives: list | None = None) -> None:
     """Compact OPEN POSITIONS widget: ticker · current R · status pill ·
     entry→target progress meter, with total open R in the footer. Reuses the
@@ -583,8 +673,8 @@ def setup_card(row: dict, detail_fn, key: str, tier: int = None,
                     unsafe_allow_html=True)
         st.markdown("<hr class='pp-divider'/>", unsafe_allow_html=True)
         if focus:
-            # mockup footer: Trade setup / Chart / Alert, docked under the card.
-            f0, f1, f2, f3 = st.columns([4, 2.4, 2, 1], vertical_alignment="center")
+            # mockup footer: Trade setup / Chart, docked under the card.
+            f0, f1, f3 = st.columns([4, 2.4, 1], vertical_alignment="center")
             with f0:
                 if entry and stop and st.button("📈 Trade setup", key=f"ppxtrade_focus_{key}",
                                                 type="primary", use_container_width=True):
@@ -592,9 +682,6 @@ def setup_card(row: dict, detail_fn, key: str, tier: int = None,
                     st.switch_page("views/position_sizer.py")
             with f1:
                 st.link_button("📊 Chart", c.tradingview_url(tk), use_container_width=True)
-            with f2:
-                if st.button("🔔 Alert", key=f"ppxalert_focus_{key}", use_container_width=True):
-                    st.toast("Alerts arrive in a later phase", icon="🔔")
             with f3:
                 c.star_button(tk, key=f"ppxrow_{key}")
         else:

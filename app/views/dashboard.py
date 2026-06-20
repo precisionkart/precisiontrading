@@ -112,24 +112,17 @@ col_sl, col_sr = st.columns([1, 1.62], gap="medium")
 with col_sl:
     ui.sector_ladder(scan.get("themes", []))
 with col_sr:
-    st.markdown("<div class='ppx-h' style='margin-top:0'>Today's setups</div>",
-                unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='ppx-sub'>Ranked {scanned} · {len(t1)} Elite · "
-        f"{len(t2)} Good · {len(t3)} Watch</div>", unsafe_allow_html=True)
-
-    if len(tiers) == 0:
-        st.markdown("<div class='pp-empty'>No names scored 50+.</div>",
-                    unsafe_allow_html=True)
-
-    _ci = 0
-    for _, row in rest_t1:
-        ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                      ef=str(row.get("Ticker")) in ef_tickers, tier=1); _ci += 1
+    # Build the ranked rows for the table: rest of Elite + all Good (the focus
+    # stock is already shown as the big card above, so it's excluded here).
+    table_rows = [row.to_dict() for _, row in rest_t1]
     if len(t2):
-        for _, row in t2.iterrows():
-            ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                          ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
+        table_rows += [row.to_dict() for _, row in t2.iterrows()]
+
+    def _pick(tk):
+        st.session_state["mp_prefill"] = tk
+        st.switch_page("views/my_picks.py")
+
+    ui.setups_table(table_rows, _pick, n_total=scanned, key="setups")
 if len(t3):
     st.markdown("<div class='ppx-h' style='font-size:14px;margin-top:18px'>Watchlist (50-64)"
                 "</div>", unsafe_allow_html=True)
