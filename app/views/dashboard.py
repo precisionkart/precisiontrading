@@ -1,26 +1,38 @@
-"""Dashboard view — Top-10 compact cards, sector treemap, earnings, watchlist strip."""
+"""Dashboard view — redesigned (Phase 11 UI refresh).
 
-import json
+Layout: KPI strip → [sector strength ladder | open-positions widget] →
+ranked setups as compact RS/Score-forward cards → overnight earnings reactions.
+All presentation lives in dashboard_ui (ppx- design system); the data model and
+behaviour are unchanged.
+"""
+
 import os
 import sys
 
-import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common as c
 import dashboard_logic as dl
+import dashboard_ui as ui
 from pinpoint import store, analyzer
 from pinpoint import themes as themes_mod
-from pinpoint.config import CONFIG
 
 CLOUD = c.cloud_mode()
 scan = st.session_state.get("scan")
 
+ui.inject_css()
 c.page_header("Today")
 c.weekend_banner()
-c.open_positions_panel()        # OPEN POSITIONS widget (hidden when none)
+
+# Positions are computed once (cache-only, fast) and shared by the KPI strip and
+# the widget so we never enrich them twice.
+positions = store.open_positions()
+lives = [c._position_live(p) for p in positions]
+open_r = sum(lv["r_mult"] for lv in lives if lv.get("r_mult") is not None)
+
 if not scan:
+    ui.positions_widget(lives)
     if CLOUD:
         msg = "No published scan found (data/latest_scan.json)."
     else:
@@ -33,8 +45,8 @@ if not scan:
 
 theme_ctx = scan.get("theme_ctx") or themes_mod.context_from_list(scan.get("themes", []))
 sector_filter = st.session_state.get("sector_filter")
-# Stale-data banner: if the loaded scan isn't from today, say so plainly so old
-# setups are never mistaken for fresh ones (the header dot already flags it).
+
+# Stale-data banner: if the loaded scan isn't from today, say so plainly.
 _lbl, _col = c.refresh_status(scan)
 if _col != "#00D964":
     nxt = c.next_scheduled_scan().strftime("%a %-d %b, 09:30")
@@ -48,10 +60,6 @@ focus = scan.get("focus")
 ef_tickers = set()
 if focus is not None and len(focus) and "earnings_flag_active" in focus.columns:
     ef_tickers = set(focus[focus["earnings_flag_active"] == True]["ticker"].astype(str))  # noqa: E712
-
-# ---- Sector strength — compact pill row (replaces the treemap) ----
-st.markdown("<div class='pp-section'>Sector strength</div>", unsafe_allow_html=True)
-c.sector_pills(scan.get("themes", []))
 
 
 def detail_fn(tk: str):
@@ -68,16 +76,29 @@ def detail_fn(tk: str):
     return cache[key]
 
 
-# ---- Tiered output (Phase 10 step 6) ----
+# ---- Tiered output ----
 tiers = dl.build_tiers(scan.get("focus"), scan.get("targets"), sector_filter)
 t1 = tiers[tiers["Tier"] == "Elite"]
 t2 = tiers[tiers["Tier"] == "Good"]
 t3 = tiers[tiers["Tier"] == "Watchlist"]
 _tgt = scan.get("targets")
-scanned = max(len(_tgt) if _tgt is not None else 0, len(tiers))  # ranked universe size
-st.markdown("<div class='pp-section' style='margin-top:28px'>Setups</div>", unsafe_allow_html=True)
+scanned = max(len(_tgt) if _tgt is not None else 0, len(tiers))
+regime_state = getattr(scan.get("regime"), "state", "neutral")
+
+# ---- KPI strip ----
+ui.kpi_strip(regime_state, n_setups=len(tiers), n_open=len(lives), open_r=open_r)
+
+# ---- Sector strength + open positions, side by side ----
+col_l, col_r = st.columns([1.12, 1], gap="medium")
+with col_l:
+    ui.sector_ladder(scan.get("themes", []))
+with col_r:
+    ui.positions_widget(lives)
+
+# ---- Setups (ranked compact cards) ----
+st.markdown("<div class='ppx-h'>Today's setups</div>", unsafe_allow_html=True)
 st.markdown(
-    f"<div class='pp-tiercount'>Ranked {scanned} · {len(t1)} Elite · "
+    f"<div class='ppx-sub'>Ranked {scanned} · {len(t1)} Elite · "
     f"{len(t2)} Good · {len(t3)} Watch</div>", unsafe_allow_html=True)
 
 if len(tiers) == 0:
@@ -85,17 +106,17 @@ if len(tiers) == 0:
 
 _ci = 0
 if len(t1):
-    st.markdown("<div class='pp-section'>🔥 Elite (80-100)</div>", unsafe_allow_html=True)
-    for _, row in t1.iterrows():
-        c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                       ef=str(row.get("Ticker")) in ef_tickers, tier=1); _ci += 1
+    for _i, (_, row) in enumerate(t1.iterrows()):
+        ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
+                      ef=str(row.get("Ticker")) in ef_tickers, tier=1,
+                      focus=(_i == 0)); _ci += 1
 if len(t2):
-    st.markdown("<div class='pp-section'>⚡ Good (65-79)</div>", unsafe_allow_html=True)
     for _, row in t2.iterrows():
-        c.compact_card(row.to_dict(), detail_fn, key=f"card{_ci}",
-                       ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
+        ui.setup_card(row.to_dict(), detail_fn, key=f"card{_ci}",
+                      ef=str(row.get("Ticker")) in ef_tickers, tier=2); _ci += 1
 if len(t3):
-    st.markdown("<div class='pp-section'>•• Watchlist (50-64)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='ppx-h' style='font-size:14px;margin-top:18px'>Watchlist (50-64)"
+                "</div>", unsafe_allow_html=True)
     _t3 = list(t3.iterrows())
     per_row = 6
     for _r0 in range(0, len(_t3), per_row):
@@ -108,19 +129,18 @@ if len(t3):
                              help=f"Analyse {tkp}", use_container_width=True):
                     st.session_state["mp_prefill"] = tkp
                     st.switch_page("views/my_picks.py")
-c.scroll_to_card()   # smooth-scroll to a card opened from a deep-link
+c.scroll_to_card()
 
-# ---- Earnings reactions — both directions (Phase 10 step 8) ----
+# ---- Overnight earnings reactions ----
 universe_tks = set()
 _t = scan.get("targets")
 if _t is not None and len(_t) and "ticker" in _t.columns:
     universe_tks = set(_t["ticker"].astype(str))
-st.markdown("<div class='pp-section'>Overnight Earnings Reactions</div>", unsafe_allow_html=True)
+st.markdown("<div class='ppx-h'>Overnight earnings reactions</div>", unsafe_allow_html=True)
 ecol1, ecol2 = st.columns(2)
 with ecol1:
     c.earnings_panel(scan.get("earnings"), "📈 Gapping Up", "up", universe_tks)
 with ecol2:
     c.earnings_panel(scan.get("earnings_down"), "📉 Gapping Down (AVOID)", "down", universe_tks)
 
-# (Dashboard ends at Earnings — the watchlist lives on its own sidebar page.)
 c.disclaimer_footer()
