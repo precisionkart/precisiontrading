@@ -548,9 +548,17 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             setup = entries_mod.compute_setup(trigger, stop_support, measured)
         else:
             continue
-        # Focus requires R:R >= 5:1 — UNLESS it's a confirmed earnings flag or a
-        # slingshot reclaim (both earn inclusion on their own).
-        if not setup.rr_ok and not ef["detected"] and not sling["detected"]:
+        # D1 (book ch.5/18): the book has NO measured-move price target — "5:1" is
+        # the judgment that a TIGHT entry can realistically run 5R, not a flagpole
+        # projection. So Focus no longer gates on the measured-move R:R; it gates
+        # on tight risk (stop close enough that 5R is plausible) and lets the
+        # pinpoint score filter quality. target_5r (entry+5*risk) carries the 5R
+        # objective for profit-taking. ef/sling still earn inclusion on their own.
+        risk_ok = bool(
+            setup.risk == setup.risk and setup.risk > 0 and setup.entry > 0
+            and (setup.risk / setup.entry) * 100.0 <= CONFIG.entry.max_risk_pct
+        )
+        if not risk_ok and not ef["detected"] and not sling["detected"]:
             continue
 
         cont = timeframes_mod.continuity(daily)
@@ -578,16 +586,31 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
             "support_resistance_flip": _sr_flip(d),
             "timeframe_continuity": cont.aligned,
             "beach_ball": bool(bb_fired),
-            "reward_risk": bool(setup.rr_ok),
+            "reward_risk": risk_ok,   # D1: Risk Quality = tight risk, not the projected target
             "earnings_flag": ef_active,
             "slingshot": bool(sling["detected"]),
         })
+        # D6 (book ch.17): institutional volume is what validates a breakout, so
+        # volume confirmation is a hard Focus prerequisite — not just a scored
+        # layer. ef/sling are exempt (they carry their own volume dynamics and
+        # earn inclusion on their own).
+        if not base_layers.get("volume_confirmation") and not ef["detected"] and not sling["detected"]:
+            continue
         result = score_layers(base_layers,
                               partials={"tight_contraction": comp["compression_score"]})
         if result.disqualified:
             continue
         if ef_active:
             ew.mark_triggered(ticker, ef.get("ema_zone"))
+
+        # D4 (book ch.5/18): ef/sling bypass the tight-risk gate to stay SURFACED,
+        # but they must clear the SAME risk bar as every other setup to occupy a
+        # Focus-grade tier. If an ef/sling setup fails the tight-risk bar (risk% >
+        # CONFIG.entry.max_risk_pct, i.e. not risk_ok), cap its tier at Watchlist
+        # — it cannot be labelled Good/Elite. Non-ef/sling setups are untouched.
+        focus_tier = result.tier
+        if (ef["detected"] or sling["detected"]) and not risk_ok and focus_tier in ("Elite", "Good"):
+            focus_tier = "Watchlist"
 
         sector = (urow.get("sector") if urow is not None else t.get("sector"))
         industry = (urow.get("industry") if urow is not None else None)
@@ -637,7 +660,7 @@ def enrich_focus(targets: pd.DataFrame, universe: pd.DataFrame, regime: Regime,
 
             "pinpoint_score": result.score,
             "score_legacy": result.score_legacy,
-            "tier": result.tier,
+            "tier": focus_tier,
             "n_layers": len(result.fired),
             "layers": result.breakdown_str(),
         })
