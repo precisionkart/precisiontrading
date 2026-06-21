@@ -109,11 +109,17 @@ def get_signal(stage, pat, setup) -> str:
 
 
 def compute_rating(df, stage, pat, setup) -> tuple:
-    """Overall Pinpoint rating (0-100 score + tier) from the production scorer —
-    the same layers the dashboard uses, derived point-in-time. Returns
-    (score, tier_label)."""
+    """Telegram OVERALL RATING (0-100 + tier) from the production scorer, but a
+    TECHNICAL-ONLY SUBSET: it fires only the layers computable from a single
+    ticker's daily OHLCV (compression, stage, pattern, MA reaction, volume, R:R,
+    and time-frame continuity). It intentionally OMITS the context layers the
+    full dashboard scan adds — hot_theme / top_industry_group (theme & universe
+    ranking), beach_ball (relative strength vs the index), and the D3
+    strong_growth fundamentals layer — so this number runs LOWER than, and is
+    NOT identical to, the dashboard score. Returns (score, tier_label)."""
     try:
         from pinpoint import scoring as scoring_mod, patterns as patterns_mod
+        from pinpoint import timeframes as timeframes_mod
         from pinpoint.config import market_is_open
         last = df.iloc[-1]
         close = float(last["Close"])
@@ -124,16 +130,22 @@ def compute_rating(df, stage, pat, setup) -> tuple:
         sma200 = float(last.get("SMA200", float("nan")))
         avg20v = float(df["Volume"].iloc[-20:].mean()) if len(df) >= 20 else float("nan")
         vol_thr = 2.0 if market_is_open() else 1.0
+        # time-frame continuity is computable from the daily OHLCV alone — compute
+        # it the same way the scan does (weekly+daily alignment) rather than drop it.
+        cont = timeframes_mod.continuity(df)
         layers = {
             "valid_pattern": pat is not None,
             "reward_risk": bool(setup and getattr(setup, "rr_ok", False)),
             "stage_2": bool(stage.is_stage2),
             "support_resistance_flip": False,
-            "timeframe_continuity": False,
+            "timeframe_continuity": bool(cont.aligned),
             "correct_ma_reaction": bool(ema20 == ema20 and close >= ema20 and
                                         (abs(close - ema10) / close <= 0.08
                                          if ema10 == ema10 and close else False)),
             "volume_confirmation": bool(avg20v == avg20v and float(last["Volume"]) > avg20v * vol_thr),
+            # beach_ball needs the index series + beta (not in this single-ticker
+            # path) and hot_theme/top_industry_group/strong_growth need universe/
+            # theme/fundamentals context — left False on purpose (technical-only).
             "beach_ball": False, "hot_theme": False, "top_industry_group": False,
             "chart_ok": True, "not_earnings_gap_down": True,
         }
