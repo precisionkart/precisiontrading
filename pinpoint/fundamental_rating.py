@@ -63,8 +63,17 @@ ACCUM_LO, ACCUM_HI = -1.0, 1.0     # caller passes a normalized A/D signal in [-
 UDVR_LO, UDVR_HI = 0.8, 2.0        # up/down volume ratio
 
 # --- flags / clamps --------------------------------------------------------
-MARGIN_CAP = 50.0          # net margin above this -> one-time-item warning, use cap
+MARGIN_CAP = 50.0          # SCORING clamp: margin contribution capped here so a
+#                            spike can't inflate the score (independent of the flag)
 STRONG_MARGIN = 20.0       # capped margin >= this -> strong_margin flag
+
+# --- relative one-time-item detection (TUNE vs ShakeBot) -------------------
+# The warning is RELATIVE: compare the latest single-quarter margin to the MEDIAN
+# of the company's own older quarters (robust to outliers). Absolute MARGIN_CAP is
+# only the scoring clamp above, NOT the flag.
+ONE_TIME_SPIKE_K = 1.5     # latest >= K * baseline-median -> spike   (placeholder)
+ONE_TIME_MIN_ABS = 40.0    # latest must exceed this to even consider a spike
+ONE_TIME_MIN_HISTORY = 3   # need >= this many usable baseline quarters, else DON'T flag
 TRIPLE_DIGIT = 100.0       # any growth >= this -> triple_digit_growth
 MONSTER_GROWTH = 50.0      # any growth >= this -> monster_growth
 ACCUM_POSITIVE = 0.0       # accumulation strictly above this -> positive
@@ -116,6 +125,16 @@ def _lin(v: float, lo: float, hi: float) -> float:
     return max(0.0, min(100.0, (v - lo) / (hi - lo) * 100.0))
 
 
+def _median(xs: list[float]) -> float:
+    """Median of a non-empty list (robust to outliers). NaN on empty."""
+    s = sorted(xs)
+    n = len(s)
+    if n == 0:
+        return NAN
+    mid = n // 2
+    return s[mid] if n % 2 else (s[mid - 1] + s[mid]) / 2.0
+
+
 def _component(parts: list[tuple[float, float]]) -> Optional[float]:
     """parts = [(weight, subscore), ...] for PRESENT metrics only.
     Returns the weight-renormalized average, or None if nothing is present."""
@@ -142,8 +161,14 @@ def _grade(score: float) -> str:
 def rate_fundamentals(eps_qoq=NAN, eps_this_y=NAN, eps_past5y=NAN,
                       sales_qoq=NAN, sales_past5y=NAN,
                       net_margin=NAN, roe=NAN,
-                      accumulation=None, up_down_volume_ratio=None) -> FundamentalRating:
-    """Pure fundamental rating. All inputs optional (NaN/None = missing)."""
+                      accumulation=None, up_down_volume_ratio=None,
+                      margin_history=None) -> FundamentalRating:
+    """Pure fundamental rating. All inputs optional (NaN/None = missing).
+
+    margin_history: per-quarter single-quarter net margins (%), newest-first
+    (from get_financials). Used only for the RELATIVE one-time-item flag; absent
+    or too-short history simply doesn't flag (and is noted in missing_inputs)."""
+    margin_history = list(margin_history) if margin_history else []
     vals = dict(eps_qoq=eps_qoq, eps_this_y=eps_this_y, eps_past5y=eps_past5y,
                 sales_qoq=sales_qoq, sales_past5y=sales_past5y,
                 net_margin=net_margin, roe=roe, accumulation=accumulation,
@@ -162,7 +187,8 @@ def rate_fundamentals(eps_qoq=NAN, eps_this_y=NAN, eps_past5y=NAN,
     eps_score = _component(eps_parts)
 
     # ---- SMR component (sales + margin + roe) ----
-    one_time = _present(net_margin) and net_margin > MARGIN_CAP
+    # Scoring clamp (independent of the one-time FLAG below): a margin spike can
+    # never inflate the score beyond MARGIN_CAP.
     nm_capped = min(net_margin, MARGIN_CAP) if _present(net_margin) else NAN
     smr_parts = []
     if _present(sales_qoq):
@@ -188,6 +214,21 @@ def rate_fundamentals(eps_qoq=NAN, eps_this_y=NAN, eps_past5y=NAN,
     comp_present = [(w, s) for w, s in comps if s is not None]
     overall = _component(comp_present) if comp_present else NAN
     grade = _grade(overall)
+
+    # ---- relative one-time-item detection (vs the company's own trailing norm) ----
+    # baseline = MEDIAN of OLDER quarters (exclude the most recent 1 to avoid
+    # recent-contamination), NaNs dropped. Flag only with enough usable history.
+    baseline_q = [m for m in margin_history[1:] if _present(m)]
+    latest_margin = margin_history[0] if (margin_history and _present(margin_history[0])) else NAN
+    baseline_med = NAN
+    one_time = False
+    if len(baseline_q) >= ONE_TIME_MIN_HISTORY and _present(latest_margin):
+        baseline_med = _median(baseline_q)
+        if baseline_med == baseline_med and baseline_med > 0:
+            one_time = bool(latest_margin >= ONE_TIME_SPIKE_K * baseline_med
+                            and latest_margin > ONE_TIME_MIN_ABS)
+    else:
+        missing.append("margin_history (insufficient to judge one-time items)")
 
     # ---- flags ----
     growths = [eps_qoq, eps_this_y, eps_past5y, sales_qoq, sales_past5y]
