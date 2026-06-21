@@ -21,7 +21,7 @@ from .config import CONFIG, LayerWeights
 # The additive BASE is 7 ShakeBot-mapped modules whose RAW weights sum to
 # BASE_TOTAL; the base is normalized to SCORE_MAX. BONUS layers are added AFTER
 # normalization and the final score is capped at SCORE_MAX.
-BASE_TOTAL: float = 110.0
+BASE_TOTAL: float = 130.0   # D3: +20 Fundamental Growth (strong_growth) layer
 SCORE_MAX: float = 100.0
 _NORMALIZE: float = SCORE_MAX / BASE_TOTAL
 
@@ -38,6 +38,7 @@ LAYER_NAMES: tuple[str, ...] = (
     "reward_risk",              # Risk Quality (5)
     "hot_theme",                # Sector Strength (15)
     "top_industry_group",
+    "strong_growth",            # Fundamental Growth (20) — D3 (EPS + sales)
 )
 
 # Bonus layers — added after normalization, score then capped at 100.
@@ -87,7 +88,8 @@ LAYER_LABELS: dict[str, str] = {
     "top_industry_group": "Top 5-10 industry group",
     "beach_ball": "Beach-ball relative strength",
     "volume_confirmation": "Volume confirmation (RVOL>2 / surge)",
-    "reward_risk": "R:R >= 5:1",
+    "reward_risk": "Risk quality (tight stop, 5R realistic)",
+    "strong_growth": "Strong fundamentals (EPS / sales growth)",
     "volume_dry_up": "Volume dry-up (+2 bonus)",
     "slingshot": "Slingshot reclaim (+3 bonus)",
     "earnings_flag": "Earnings flag breakout (+25 bonus, highest-edge)",

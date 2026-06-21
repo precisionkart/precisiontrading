@@ -129,6 +129,13 @@ class EntryConfig:
     # risk against a large measured move to reach R:R >= 5:1 (3.7). The strategy
     # front-runs with inside-day / pivot-low risk, so this is a short window.
     stop_lookback: int = 3
+    # D1 (book ch.5/18): the book has NO measured-move price target; "5:1" is the
+    # judgment that a TIGHT entry can realistically run 5R, not a flagpole
+    # projection. Focus therefore gates on tight risk (the stop is close enough
+    # that 5R is plausible) + the pinpoint score, NOT on a projected target.
+    # max_risk_pct is the sanity ceiling on per-share risk as a % of entry; the
+    # score does the real quality filtering.
+    max_risk_pct: float = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -139,13 +146,15 @@ class EntryConfig:
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class LayerWeights:
-    """0-100 rescale (Phase 10 step 1). The additive base is 7 ShakeBot-mapped
-    modules whose RAW weights sum to BASE_TOTAL (110) and are normalized to 100
-    in scoring.py. Three bonuses are added AFTER normalization and the final
-    score is capped at 100. Three legacy layers were migrated OUT of the score:
+    """0-100 rescale (Phase 10 step 1). The additive base modules' RAW weights
+    sum to BASE_TOTAL (130) and are normalized to 100 in scoring.py. Three
+    bonuses are added AFTER normalization and the final score is capped at 100.
+    Two legacy layers remain migrated OUT of the score:
       regime_bull   -> 5-state regime / position-sizing suggestion (step 7)
-      strong_growth -> "Triple-Digit Growth" plain-English flag (step 5)
       ipo_edge      -> IPO-page tagging only (not scored on the Focus list)
+    D3 (book ch.17): strong_growth (EPS / sales growth) is now a weighted base
+    layer — the book treats fundamentals (EPS + sales growth) as central to
+    name selection, not a mere flag.
     """
     # --- Compression (25) ---
     tight_contraction: float = 25.0
@@ -165,6 +174,8 @@ class LayerWeights:
     # --- Sector Strength (15) ---
     hot_theme: float = 8.0
     top_industry_group: float = 7.0
+    # --- Fundamental Growth (20) — D3 (book ch.17): EPS + sales growth ---
+    strong_growth: float = 20.0
 
     # Bonuses — added after the base is normalized to 100, then capped at 100.
     volume_dry_up: float = 2.0             # 5-bar dry-up (step 5 flag)
@@ -173,7 +184,6 @@ class LayerWeights:
 
     # Migrated out of the additive score (kept as 0.0 for back-compat refs).
     regime_bull: float = 0.0
-    strong_growth: float = 0.0
     ipo_edge: float = 0.0
 
     def as_dict(self) -> dict[str, float]:
@@ -190,6 +200,7 @@ class LayerWeights:
             "reward_risk": self.reward_risk,
             "hot_theme": self.hot_theme,
             "top_industry_group": self.top_industry_group,
+            "strong_growth": self.strong_growth,
         }
 
     def bonus_dict(self) -> dict[str, float]:
