@@ -147,7 +147,7 @@ class MassiveClient:
         results = (j or {}).get("results") or []
         out = {"eps_qoq": _nan(), "sales_qoq": _nan(), "eps_this_y": _nan(),
                "eps_past5y": _nan(), "sales_past5y": _nan(),
-               "net_margin": _nan(), "roe": _nan(),
+               "net_margin": _nan(), "roe": _nan(), "margin_history": [],
                "latest_filing_date": None, "latest_period_end": None}
         if not results:
             return out
@@ -194,6 +194,16 @@ class MassiveClient:
                     out["net_margin"] = ni_ttm / rev_ttm * 100.0
                 if eq0 == eq0 and eq0 > 0:
                     out["roe"] = ni_ttm / eq0 * 100.0
+
+        # Per-quarter (single-quarter, NOT TTM) net-margin series, newest-first,
+        # up to ~8 quarters — lets a later relative one-time-item test compare the
+        # latest margin against the company's own trailing norm. A quarter with
+        # missing/zero revenue stays in place as NaN so the series is time-ordered.
+        def _q_margin(n, r):
+            if n == n and r == r and r != 0:
+                return n / r * 100.0
+            return _nan()
+        out["margin_history"] = [_q_margin(ni[i], rev[i]) for i in range(min(8, len(q)))]
 
         def _growth(cur, prior):
             if cur != cur or prior != prior or prior == 0:
