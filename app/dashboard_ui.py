@@ -71,7 +71,7 @@ _CSS = """
 .ppx-tbl .lvl{font-family:var(--ppx-mono);font-weight:600;font-size:13px}
 .ppx-tbl .lvl-entry{color:var(--ppx-bull)}.ppx-tbl .lvl-stop{color:var(--ppx-bear)}.ppx-tbl .lvl-tgt{color:var(--ppx-ink)}
 /* setups rebuilt as real Streamlit rows: thead-style header strip + row dividers */
-.ppx-thr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1.2fr 1.2fr 1.2fr 1fr 1.3fr;gap:.5rem;align-items:center;padding:9px 6px 7px;border-bottom:1px solid var(--ppx-line)}
+.ppx-thr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1.2fr 1.2fr 1.2fr 1fr 1.8fr 1.3fr;gap:.5rem;align-items:center;padding:9px 6px 7px;border-bottom:1px solid var(--ppx-line)}
 .ppx-thr>span{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
 .ppx-thr>span.num{text-align:right}
 [class*="st-key-setups_row"]{border-bottom:1px solid var(--ppx-line);padding:2px 0}
@@ -367,17 +367,16 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
                           and s_ == s_ and (e_ - s_) > 0)
             t_txt = _money(e_ + 3 * (e_ - s_)) if valid_plan else "—"
             # Position size at the user's account/risk% (Settings → data/user_settings.json)
-            # via the shared helper c.shares_for(entry, stop) — shares = account ×
-            # risk% ÷ per-share risk. Compact "{shares} sh · ${posval}"; "—" when
-            # there's no valid plan or the account is too small for ≥1 share.
+            # via c.dollar_position — FRACTIONAL shares so small accounts still get a
+            # meaningful USD value. Shows "${posval} · {fshares} sh"; "—" if no plan.
             if valid_plan:
-                sh_, _dr_ = c.shares_for(e_, s_)
-                size_txt = f"{sh_:,} sh · ${sh_ * e_:,.0f}" if sh_ else "—"
+                fsh_, posval_ = c.dollar_position(e_, s_)
+                size_txt = f"${posval_:,.0f} · {fsh_:.2f} sh" if posval_ > 0 else "—"
             else:
                 size_txt = "—"
 
             with st.container(key=f"{key}_row_{i}"):
-                cols = st.columns([2.0, 1, 1, 1.2, 1.2, 1.2, 1, 1.8, 1.3],
+                cols = st.columns([2.2, 1, 1, 1.2, 1.2, 1.2, 1, 1.8, 1.3],
                                   vertical_alignment="center")
                 with cols[0]:
                     star_col, tk_col = st.columns([1, 4], vertical_alignment="center")

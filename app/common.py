@@ -202,6 +202,20 @@ def shares_for(entry, stop) -> tuple[int, float]:
     return sh, sizing_mod.compute_dollar_risk(sh, entry, stop)
 
 
+def dollar_position(entry, stop) -> tuple[float, float]:
+    """(FRACTIONAL shares, $ position value) for a setup at the user's account/
+    risk% — allows partial shares so a small account still gets a meaningful size.
+    Position value = fractional shares × entry. (0.0, 0.0) when there's no valid
+    plan. Unlike shares_for (whole shares), this never floors to 0."""
+    s = sizing_settings()
+    psr = sizing_mod.per_share_risk(entry, stop)
+    acct, rp = float(s.get("account") or 0.0), float(s.get("risk_pct") or 0.0)
+    if psr <= 0 or acct <= 0 or rp <= 0:
+        return 0.0, 0.0
+    fshares = (acct * rp / 100.0) / psr      # risk budget ÷ per-share risk
+    return fshares, fshares * float(entry)
+
+
 def heat_badge_html() -> str:
     """Portfolio-heat indicator for the header: 'Heat: 1.8% / 5.0% across 3 open'
     (green/amber/red), or '0% — no open positions'."""
