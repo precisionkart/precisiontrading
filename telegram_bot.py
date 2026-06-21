@@ -256,7 +256,8 @@ def analyse_ticker(ticker: str) -> str:
         if setup and setup.rr_ok:
             lines += [f"Entry   ${setup.entry:.2f}",
                       f"Stop    ${setup.stop:.2f}  ({setup.stop_kind} .89 rule)",
-                      f"Target  ${setup.measured_target:.2f}",
+                      f"Target (3R)  ${setup.target_3r:.2f}",
+                      f"Stretch: ${setup.measured_target:.2f} (measured move)",
                       f"R:R     {setup.reward_risk:.1f}:1  ✅", ""]
         elif setup:
             lines += [f"Entry   ${setup.entry:.2f}",

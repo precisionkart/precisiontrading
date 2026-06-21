@@ -361,9 +361,11 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
             e_, s_ = r.get("Entry"), r.get("Stop")
             rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
             e_txt, s_txt = _money(e_), _money(s_)
+            # Target column = the 3R objective (Entry + 3*risk), matching the focus
+            # card headline. (R:R is left as-is — still measured-move-based.)
             if (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float))
-                    and s_ == s_ and isinstance(rr_, (int, float)) and rr_ == rr_):
-                t_txt = _money(e_ + rr_ * (e_ - s_))   # Target = Entry + R:R*(Entry-Stop)
+                    and s_ == s_ and (e_ - s_) > 0):
+                t_txt = _money(e_ + 3 * (e_ - s_))
             else:
                 t_txt = "—"
 
@@ -609,20 +611,26 @@ def _card_body(row: dict, spark: str, price: float, chg, ef: bool, focus: bool,
     if isinstance(e, (int, float)) and e == e and isinstance(s_, (int, float)) and s_ == s_:
         risk = e - s_
         rr_txt = f"{rr_:.1f}:1" if isinstance(rr_, (int, float)) and rr_ == rr_ else "—"
-        tgt = (f"${e + rr_ * risk:,.2f}"
-               if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else "—")
+        # Headline target = the 3R objective (Entry + 3*risk); the full 1.0x
+        # measured move is demoted to a clearly-labelled stretch line below.
+        t3_txt = f"${e + 3 * risk:,.2f}" if risk > 0 else "—"
+        mm_txt = (f"${e + rr_ * risk:,.2f}"
+                  if isinstance(rr_, (int, float)) and rr_ == rr_ and risk > 0 else None)
         risk_pct = f"{risk / e * 100:.1f}% risk" if e else "risk"
+        stretch = (f"<div class='ppx-meta' style='margin-top:7px'>"
+                   f"Measured move (stretch): <b>{mm_txt}</b></div>" if mm_txt else "")
         levels = (
             "<div class='ppx-levels'>"
             f"<div class='ppx-lvl'><i>Entry</i><b class='bull'>${e:,.2f}</b>"
             "<div class='sub'>breakout trigger</div></div>"
             f"<div class='ppx-lvl'><i>Stop</i><b class='bear'>${s_:,.2f}</b>"
             f"<div class='sub'>{risk_pct}</div></div>"
-            f"<div class='ppx-lvl'><i>Target</i><b>{tgt}</b>"
-            "<div class='sub'>first objective</div></div>"
+            f"<div class='ppx-lvl'><i>Target</i><b>{t3_txt}</b>"
+            "<div class='sub'>3R target</div></div>"
             f"<div class='ppx-lvl'><i>R : R</i><b>{rr_txt}</b>"
             "<div class='sub'>reward / risk</div></div>"
-            "</div>")
+            "</div>"
+            f"{stretch}")
     else:
         levels = ""
 
