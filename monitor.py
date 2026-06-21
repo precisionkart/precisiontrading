@@ -90,11 +90,17 @@ def _emas_for(ticker):
         except Exception:  # noqa: BLE001
             return None
 
-    return g("EMA5"), g("EMA10"), g("EMA20")
+    return g("EMA5"), g("EMA10"), g("EMA20"), g("Close")
 
 
-def evaluate_position(pos, price, ema5, ema10, ema20):
-    """Return a list of alert dicts for one position. Pure / testable."""
+def evaluate_position(pos, price, ema5, ema10, ema20, last_close=None):
+    """Return a list of alert dicts for one position. Pure / testable.
+
+    D5 (book ch.24): the EMA trail is an exit only on a CLOSE below the EMA, not
+    an intraday touch. `last_close` is the last completed daily close used to
+    confirm the trail break; the live intraday `price` only raises a softer
+    WATCH. The hard stop and trim/parabolic signals still use intraday `price`
+    (a hard stop is a resting order; trims are intraday-extension cues)."""
     tk = str(pos.get("ticker", "")).upper()
     entry = pos.get("entry")
     stop = pos.get("stop")
@@ -117,13 +123,21 @@ def evaluate_position(pos, price, ema5, ema10, ema20):
         add("HARD_STOP", "CRITICAL", "exit full position",
             f"{tk} ${price:,.2f} below hard stop ${float(stop):,.2f}")
 
-    # EMA trail breaks (only for the position's chosen trail)
-    if trail_mode == "EMA10" and ema10 is not None and price < ema10:
-        add("EMA10_TRAIL", "HIGH", "exit / tighten — closed below 10 EMA trail",
-            f"{tk} ${price:,.2f} below 10 EMA ${ema10:,.2f} (EMA10 trail)")
-    if trail_mode == "EMA20" and ema20 is not None and price < ema20:
-        add("EMA20_TRAIL", "HIGH", "exit / tighten — closed below 20 EMA trail",
-            f"{tk} ${price:,.2f} below 20 EMA ${ema20:,.2f} (EMA20 trail)")
+    # EMA trail breaks (only for the position's chosen trail). Book ch.24: exit
+    # on a CLOSE below the EMA; an intraday dip below is only a WATCH.
+    def ema_trail(mode, ema, label):
+        if trail_mode != mode or ema is None:
+            return
+        if last_close is not None and last_close < ema:
+            add(f"{mode}_TRAIL", "HIGH", f"exit / tighten — closed below {label} trail",
+                f"{tk} daily close ${last_close:,.2f} below {label} ${ema:,.2f} ({mode} trail)")
+        elif price is not None and price < ema:
+            add(f"{mode}_TRAIL_WATCH", "MEDIUM",
+                f"watch — exit only on a daily CLOSE below {label}",
+                f"{tk} ${price:,.2f} below {label} ${ema:,.2f} intraday — needs a close below to confirm")
+
+    ema_trail("EMA10", ema10, "10 EMA")
+    ema_trail("EMA20", ema20, "20 EMA")
 
     # PARABOLIC climax — 20%+ above 5 EMA -> trim and switch to 5 EMA trail
     if ema5 is not None and ema5 > 0:
@@ -209,13 +223,11 @@ def main() -> int:
         if not tk:
             continue
         price = prices.get(tk)
-        ema5, ema10, ema20 = _emas_for(tk)
+        ema5, ema10, ema20, last_close = _emas_for(tk)
         if price is None and ema5 is not None:
             # No live snapshot — fall back to last close so trails still evaluate.
-            res = ohlcv_mod.fetch_daily(tk)
-            if not res.empty:
-                price = float(res.df["Close"].iloc[-1])
-        alerts = evaluate_position(pos, price, ema5, ema10, ema20)
+            price = last_close
+        alerts = evaluate_position(pos, price, ema5, ema10, ema20, last_close=last_close)
         for a in alerts:
             print(f"  [{a['urgency']}] {a['kind']}: {a['message']}")
         new_alerts.extend(alerts)
