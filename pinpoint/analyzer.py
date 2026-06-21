@@ -38,7 +38,7 @@ from .scoring import score_layers
 # _reconciled_classification). NOT wired into the live render; flip only after
 # review. The live dashboard path leaves this False.
 # ---------------------------------------------------------------------------
-RECONCILED_GATING = False
+RECONCILED_GATING = True
 
 
 def _reconciled_classification(row, setup, pat, ef_detected, sling_detected, rs, g) -> str:

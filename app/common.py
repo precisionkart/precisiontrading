@@ -638,6 +638,9 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
     entry = row.get("entry_trigger") if "entry_trigger" in row else row.get("entry")
     target = row.get("measured_target") if "measured_target" in row else row.get("target")
     pill_html = f"<span class='pp-pill {pill}'>{_pill_label(pill, row.get('reward_risk'))}</span>" if pill else ""
+    # ef/sling (capped) setups have no measured R:R — show risk-defined dash, never None:1.
+    _rr = row.get("reward_risk")
+    rr_cell = f"{_fmt(_rr,1)}:1" if isinstance(_rr, (int, float)) and _rr == _rr else "—"
 
     st.markdown(f"""
 <div class='pp-card'>
@@ -651,7 +654,7 @@ def focus_card(row: pd.Series, daily=None, pill: str = "") -> None:
     <div class='pp-cell'><div class='k'>Entry</div><div class='v green'>${_fmt(entry)}</div></div>
     <div class='pp-cell'><div class='k'>Stop (.89)</div><div class='v red'>${_fmt(row.get('stop'))}</div></div>
     <div class='pp-cell'><div class='k'>Target</div><div class='v'>${_fmt(target)}</div></div>
-    <div class='pp-cell'><div class='k'>R:R</div><div class='v'>{_fmt(row.get('reward_risk'),1)}:1</div></div>
+    <div class='pp-cell'><div class='k'>R:R</div><div class='v'>{rr_cell}</div></div>
   </div>
   {atr_readout_html(row)}
   {flags_warnings_html(row)}
@@ -731,6 +734,9 @@ def _pill_label(pill: str, rr) -> str:
     if pill == "near":
         rr_txt = f" (R:R {rr:.1f}:1)" if isinstance(rr, (int, float)) and rr == rr else ""
         return f"△ Setup not ready{rr_txt}"
+    if pill == "capped":
+        # wide-risk ef/sling qualifier: a real setup, but tier-capped (mirrors D4).
+        return "◐ Watchlist · wide risk"
     if pill == "fail":
         return "✗ Not a setup"
     return ""
@@ -750,9 +756,12 @@ def pick_card(pr) -> None:
 </div>""", unsafe_allow_html=True)
         return
 
-    pill = {"A+": "ok", "near": "near", "fail": "fail"}.get(pr.classification, "fail")
+    # 'capped' (reconciled analyzer): a real but wide-risk ef/sling setup — render
+    # the FULL focus card (not the stripped fail card), with a Watchlist pill.
+    pill = {"A+": "ok", "near": "near", "capped": "capped", "fail": "fail"}.get(
+        pr.classification, "fail")
 
-    if pr.classification in ("A+", "near"):
+    if pr.classification in ("A+", "near", "capped"):
         row = pd.Series({
             "ticker": pr.ticker, "sector": pr.sector, "theme": pr.theme,
             "pattern": pr.pattern, "score": pr.score, "rs": pr.rs,
