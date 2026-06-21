@@ -484,7 +484,7 @@ def full_scan(ignore_rvol: bool = False, progress_cb=None) -> dict:
             _prov = lambda t: ohlcv_mod.fetch_daily(t).df
             wl_mod.snapshot_from_scan(focus, uni.df, ew_mod.active_ctx(),
                                       ohlcv_provider=_prov, source="manual")
-            wl_mod.resolve_trades(_prov)       # resolve open paper-trades vs today's OHLCV
+            # (paper trade-log resolution removed — trade log retired from the UI)
         except Exception as exc:  # noqa: BLE001
             warnings.append(f"watchlist snapshot skipped: {exc}")
         # Re-publish latest_scan.json too so the local cache and the cloud blob

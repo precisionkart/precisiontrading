@@ -17,7 +17,6 @@ import common as c
 import dashboard_logic as dl
 from pinpoint import store, analyzer, watchlist as wl
 from pinpoint import earnings_watch as ew
-from pinpoint import ohlcv as ohlcv_mod
 from pinpoint import themes as themes_mod
 from pinpoint import regime as regime_mod
 
@@ -111,7 +110,7 @@ else:
 
 st.markdown(f"<div class='pp-section'>{len(rows)} shown</div>", unsafe_allow_html=True)
 
-# ---- status grid ----
+# ---- compact list: star · ticker · price %Δ · status pill; detail in expander ----
 for i, r in enumerate(rows):
     tk, pr, status = r["tk"], r["pr"], r["status"]
     pill_txt, pill_cls = _PILL[status]
@@ -120,88 +119,45 @@ for i, r in enumerate(rows):
         cc = "up" if r["chg"] >= 0 else "down"
         chg_html = f"<span class='chg {cc}'>{'▲' if r['chg']>=0 else '▼'} {abs(r['chg']):.1f}%</span>"
     px = f"${r['price']:,.2f}" if r["price"] is not None else "—"
-    pat = (pr.pattern.split(' /')[0] if pr and pr.pattern else "—")
-    # trade plan (active only)
-    plan = ""
-    if status == "ACTIVE" and pr is not None:
-        sh, dr = c.shares_for(pr.entry, pr.stop)
-        plan = (f"<div class='pp-wl-plan'>E ${pr.entry:,.2f} · X ${pr.stop:,.2f} · "
-                f"T ${pr.target:,.2f} · {pr.reward_risk:.1f}:1"
-                f"{f' · {sh} sh' if sh else ''}</div>") if pr.entry and pr.stop else ""
-    spark = dl.sparkline_svg(wl.rs_series(tk, 30)) if len(wl.rs_series(tk, 30)) >= 2 else ""
-    since = (f"<span class='pp-wl-since {'up' if r['since']>=0 else 'down'}'>"
-             f"Since added: {'+' if r['since']>=0 else ''}{r['since']:.1f}%</span>"
-             if r["since"] is not None else "")
-    days = f"{r['days']}d on list" if r["days"] is not None else ""
-    dormant_hint = (" · <span class='pp-wl-hint'>consider removing</span>"
-                    if r["dormant_streak"] >= wl.DORMANT_CONSECUTIVE_DAYS else "")
 
-    head, starc = st.columns([14, 1], vertical_alignment="center")
-    head.markdown(
-        f"<div class='pp-wl-card'>"
-        f"<div class='pp-wl-top'><span class='pp-wl-tk'>{c._html.escape(tk)}</span>"
-        f"{c.rs_chip_html(r['rs'])}<span class='pp-wl-px'>{px} {chg_html}</span>"
-        f"<span class='pp-pill {pill_cls}'>{pill_txt}</span>"
-        f"<span class='pp-wl-pat'>{c._html.escape(pat)}</span>"
-        f"<span class='pp-wl-spark'>{spark}</span></div>"
-        f"{plan}"
-        f"<div class='pp-wl-meta'>{since}{(' · ' if since and days else '')}{days}{dormant_hint}</div>"
-        f"</div>", unsafe_allow_html=True)
+    starc, head = st.columns([1, 16], vertical_alignment="center")
     with starc:
         c.star_button(tk, key=f"wlb_{i}_{tk}")
-    # inline notes (max 280; saves on change)
-    note = st.text_input(f"notes_{tk}", value=r["notes"], max_chars=wl.NOTES_MAX,
-                         placeholder="notes…", label_visibility="collapsed", key=f"note_{tk}")
-    if note != r["notes"]:
-        wl.set_notes(tk, note)
-    # book exit signals if firing
-    if pr is not None and getattr(pr, "exit_signals", None):
-        st.markdown(c.exit_signal_pills_html(pr.exit_signals), unsafe_allow_html=True)
-    # paper-trade: mark an ACTIVE setup as "would have traded"
-    if status == "ACTIVE" and pr is not None and pr.entry and pr.stop and pr.target:
-        open_tks = {t["ticker"] for t in wl.load_trades()
-                    if str(t.get("status")) in ("open", "open_aged")}
-        if tk in open_tks:
-            st.caption(f"📝 {tk} already in the trade log")
-        elif st.button(f"📝 Log {tk} trade", key=f"mark_{tk}"):
-            sh, _dr = c.shares_for(pr.entry, pr.stop)
-            wl.mark_paper_trade(tk, pr.entry, pr.stop, pr.target, pr.reward_risk, sh)
-            st.toast(f"Logged {tk} trade")
-            st.rerun()
+    head.markdown(
+        f"<div class='pp-wl-top' style='padding:1px 0'>"
+        f"<span class='pp-wl-tk'>{c._html.escape(tk)}</span>"
+        f"<span class='pp-wl-px'>{px} {chg_html}</span>"
+        f"<span class='pp-pill {pill_cls}'>{pill_txt}</span>"
+        f"</div>", unsafe_allow_html=True)
 
-# ---- PAPER TRADES ----
-st.markdown("<div class='pp-section'>📝 Trade log</div>", unsafe_allow_html=True)
-# resolve open trades against cached OHLCV (idempotent), then show
-wl.resolve_trades(lambda t: ohlcv_mod.fetch_daily(t, cache_only=True).df)
-trades = sorted(wl.load_trades(), key=lambda t: t.get("marked_date", ""), reverse=True)
-if not trades:
-    st.markdown("<div class='pp-empty'>No trades logged yet. Log an ACTIVE setup above "
-                "to start your track record.</div>", unsafe_allow_html=True)
-else:
-    s = wl.paper_stats(trades)
-    wr = f"{s['win_rate']:.1f}%" if s["win_rate"] is not None else "—"
-    ar = f"{'+' if (s['avg_r'] or 0) >= 0 else ''}{s['avg_r']:.1f}" if s["avg_r"] is not None else "—"
-    st.markdown(
-        f"<div class='pp-tiercount'>Total: {s['total']} · Open: {s['open']} · "
-        f"Won: {s['won']} · Lost: {s['lost']} · Win rate: {wr} · Avg R: {ar}</div>",
-        unsafe_allow_html=True)
-    _sc = {"won": "won", "lost": "lost", "open": "openp", "open_aged": "openp"}
-    _sl = {"won": "WON", "lost": "LOST", "open": "OPEN", "open_aged": "OPEN (aged)"}
-    rows_html = []
-    for t in trades:
-        stt = str(t.get("status", "open"))
-        ra = t.get("r_achieved")
-        ra_txt = (f"{'+' if ra >= 0 else ''}{ra:.1f}R" if isinstance(ra, (int, float)) else "—")
-        rows_html.append(
-            f"<div class='pp-row pt {_sc.get(stt,'openp')}'>"
-            f"<span class='tk'>{c._html.escape(str(t.get('ticker')))}</span>"
-            f"<span class='px'>{str(t.get('marked_date',''))[:10]}</span>"
-            f"<span class='pt-c'>E ${t.get('entry'):,.2f}</span>"
-            f"<span class='pt-c'>X ${t.get('stop'):,.2f}</span>"
-            f"<span class='pt-c'>T ${t.get('target'):,.2f}</span>"
-            f"<span class='pt-status {_sc.get(stt,'openp')}'>{_sl.get(stt,'OPEN')}</span>"
-            f"<span class='pt-r'>{ra_txt}</span></div>")
-    st.markdown("<div style='display:flex;flex-direction:column;gap:5px'>"
-                + "".join(rows_html) + "</div>", unsafe_allow_html=True)
+    # everything else lives in the expander (compact list, low footprint)
+    with st.expander("Details", expanded=False):
+        pat = (pr.pattern.split(' /')[0] if pr and pr.pattern else "—")
+        spark = dl.sparkline_svg(wl.rs_series(tk, 30)) if len(wl.rs_series(tk, 30)) >= 2 else ""
+        plan = ""
+        if status == "ACTIVE" and pr is not None and pr.entry and pr.stop:
+            sh, dr = c.shares_for(pr.entry, pr.stop)
+            plan = (f"<div class='pp-wl-plan'>E ${pr.entry:,.2f} · X ${pr.stop:,.2f} · "
+                    f"T ${pr.target:,.2f} · {pr.reward_risk:.1f}:1"
+                    f"{f' · {sh} sh' if sh else ''}</div>")
+        since = (f"<span class='pp-wl-since {'up' if r['since']>=0 else 'down'}'>"
+                 f"Since added: {'+' if r['since']>=0 else ''}{r['since']:.1f}%</span>"
+                 if r["since"] is not None else "")
+        days = f"{r['days']}d on list" if r["days"] is not None else ""
+        dormant_hint = (" · <span class='pp-wl-hint'>consider removing</span>"
+                        if r["dormant_streak"] >= wl.DORMANT_CONSECUTIVE_DAYS else "")
+        st.markdown(
+            f"<div class='pp-wl-top'>{c.rs_chip_html(r['rs'])}"
+            f"<span class='pp-wl-pat'>{c._html.escape(pat)}</span>"
+            f"<span class='pp-wl-spark'>{spark}</span></div>"
+            f"{plan}"
+            f"<div class='pp-wl-meta'>{since}{(' · ' if since and days else '')}{days}{dormant_hint}</div>",
+            unsafe_allow_html=True)
+        note = st.text_input(f"notes_{tk}", value=r["notes"], max_chars=wl.NOTES_MAX,
+                             placeholder="notes…", label_visibility="collapsed", key=f"note_{tk}")
+        if note != r["notes"]:
+            wl.set_notes(tk, note)
+        if pr is not None and getattr(pr, "exit_signals", None):
+            st.markdown(c.exit_signal_pills_html(pr.exit_signals), unsafe_allow_html=True)
 
 c.disclaimer_footer()
