@@ -351,7 +351,7 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
             "<div class='ppx-thr'><span>Ticker</span><span class='num'>RS</span>"
             "<span class='num'>Score</span><span class='num'>Entry</span>"
             "<span class='num'>Stop</span><span class='num'>Target</span>"
-            "<span class='num'>R : R</span><span class='num'>Size</span><span>Sector</span></div>",
+            "<span class='num'>R : R</span><span>Sector</span></div>",
             unsafe_allow_html=True)
 
         for i, r in enumerate(rows):
@@ -363,20 +363,14 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
             e_txt, s_txt = _money(e_), _money(s_)
             # Target column = the 3R objective (Entry + 3*risk), matching the focus
             # card headline. (R:R is left as-is — still measured-move-based.)
-            valid_plan = (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float))
-                          and s_ == s_ and (e_ - s_) > 0)
-            t_txt = _money(e_ + 3 * (e_ - s_)) if valid_plan else "—"
-            # Position size at the user's account/risk% via the shared helper
-            # (c.shares_for reads user_settings — do not recompute here). Compact
-            # "{shares} sh · ${posval}"; "—" when there's no valid entry/stop.
-            if valid_plan:
-                sh_, _dr_ = c.shares_for(e_, s_)
-                size_txt = f"{sh_:,} sh · ${sh_ * e_:,.0f}" if sh_ else "—"
+            if (isinstance(e_, (int, float)) and e_ == e_ and isinstance(s_, (int, float))
+                    and s_ == s_ and (e_ - s_) > 0):
+                t_txt = _money(e_ + 3 * (e_ - s_))
             else:
-                size_txt = "—"
+                t_txt = "—"
 
             with st.container(key=f"{key}_row_{i}"):
-                cols = st.columns([2.2, 1, 1, 1.2, 1.2, 1.2, 1, 1.7, 1.2],
+                cols = st.columns([2.2, 1, 1, 1.2, 1.2, 1.2, 1, 1.3],
                                   vertical_alignment="center")
                 with cols[0]:
                     star_col, tk_col = st.columns([1, 4], vertical_alignment="center")
@@ -399,9 +393,6 @@ def setups_table(rows: list, on_pick, n_total: int = None, key: str = "setups") 
                     f"<div class='ppx-tbl' style='text-align:right'><span class='rr'>{rr_txt}</span></div>",
                     unsafe_allow_html=True)
                 cols[7].markdown(
-                    f"<div class='ppx-tbl' style='text-align:right'><span class='rr'>{size_txt}</span></div>",
-                    unsafe_allow_html=True)
-                cols[8].markdown(
                     f"<div class='ppx-tbl'><span class='sect'>{_html.escape(sect)}</span></div>",
                     unsafe_allow_html=True)
 def positions_widget(lives: list | None = None) -> None:
