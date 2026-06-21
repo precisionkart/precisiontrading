@@ -31,6 +31,65 @@ from .rs_rating import compute_rs
 from .scoring import score_layers
 
 
+# ---------------------------------------------------------------------------
+# PROTOTYPE FLAG (Issue-1 reconciliation) — when False (default) the analyzer
+# uses the ORIGINAL classification. When True it classifies "is this a setup"
+# with the SAME criteria as the post-D1 Focus pipeline (see
+# _reconciled_classification). NOT wired into the live render; flip only after
+# review. The live dashboard path leaves this False.
+# ---------------------------------------------------------------------------
+RECONCILED_GATING = False
+
+
+def _reconciled_classification(row, setup, pat, ef_detected, sling_detected, rs, g) -> str:
+    """PROTOTYPE — classify A+/near/fail using the SAME qualification as the
+    post-D1 Focus pipeline, so the analyzer stops down-grading legitimate Focus
+    names. It STILL recomputes live (caller passes freshly-computed setup/pat/ef/
+    sling), so genuine intraday invalidation still fails — we only fix WHICH
+    criteria are applied:
+
+      * Universe gates via the SHARED pipeline.evaluate_gates(ignore_rvol=...) —
+        reuses the exact off-hours relaxation (RVOL gate dropped, near-high
+        10%->25%, avg-vol 300k->200k; price never relaxed). No second copy.
+      * D1 decouple: qualify on TIGHT RISK (risk% <= CONFIG.entry.max_risk_pct),
+        NOT the measured-move R:R >= 5 the gate was decoupled from.
+      * D6: volume-confirmation prerequisite (mirrors snapshot_layers' threshold:
+        RVOL > min_rel_volume live, > 1.0 off-hours), with ef/sling exempt.
+      * ef/sling are admitted on their own (as in enrich_focus).
+    """
+    from .config import market_is_open
+    is_open = market_is_open()
+    gres = pipeline.evaluate_gates(row, ignore_rvol=not is_open)   # SAME shared gates
+    rs_ok = bool(rs == rs and rs >= g.min_rs_rating)
+    hard_pass = bool(gres.passed and rs_ok)
+
+    # D1: tight risk replaces the measured-move 5:1 requirement. `setup` here is
+    # the effective setup (pattern setup, or the synthesized ef/sling setup).
+    risk_pct = None
+    if setup is not None and setup.risk == setup.risk and setup.risk > 0 and setup.entry > 0:
+        risk_pct = (setup.risk / setup.entry) * 100.0
+    risk_ok = bool(risk_pct is not None and risk_pct <= CONFIG.entry.max_risk_pct)
+    # D6: volume-confirmation prereq (same threshold snapshot_layers uses).
+    relv = float(row.get("rel_volume", np.nan))
+    vol_thr = g.min_rel_volume if is_open else 1.0
+    vol_ok = bool(relv == relv and relv > vol_thr)
+    is_efsling = bool(ef_detected or sling_detected)
+
+    qualifies = bool(((pat is not None and risk_ok) or is_efsling)
+                     and (vol_ok or is_efsling))
+    if not hard_pass:
+        return "fail"
+    if not qualifies:
+        return "near"
+    # Qualifies. Mirror the pipeline's D4 cap: a wide-risk qualifier (risk% >
+    # CONFIG.entry.max_risk_pct — only reachable via the ef/sling branch, since a
+    # pattern qualifier already required risk_ok) is SURFACED but capped at the
+    # analyzer's Watchlist-equivalent, not A+. Tight-risk qualifiers stay A+.
+    if risk_pct is not None and risk_pct > CONFIG.entry.max_risk_pct:
+        return "capped"
+    return "A+"
+
+
 @dataclass
 class GateCheck:
     name: str
@@ -120,18 +179,30 @@ class PickResult:
         return self.classification == "A+"
 
 
-_SORT_ORDER = {"A+": 0, "near": 1, "fail": 2, "unavailable": 3}
+_SORT_ORDER = {"A+": 0, "capped": 1, "near": 2, "fail": 3, "unavailable": 4}
 
 
 def _verdict(cls: str, gates: list[GateCheck], stage: str, pattern: Optional[str],
-            rr: Optional[float]) -> str:
+            rr: Optional[float], setup_kind: str = "", risk_pct: Optional[float] = None) -> str:
+    # ef/sling setups are risk-defined and have NO measured R:R — never format
+    # None as a float. setup_kind ("earnings flag" / "slingshot reclaim") frames them.
+    rr_txt = f"{rr:.1f}:1" if (rr is not None and rr == rr) else None
+    kind = setup_kind or "risk-defined entry"
     if cls == "A+":
-        return f"Pinpoint setup: all gates pass with R:R {rr:.1f}:1."
+        if rr_txt:
+            return f"Pinpoint setup: all gates pass with R:R {rr_txt}."
+        return f"Pinpoint setup: {kind} — risk-defined entry, no measured target."
+    if cls == "capped":   # mirrors the pipeline's D4 Watchlist cap (wide-risk ef/sling)
+        rp = (f"{risk_pct:.1f}%" if (risk_pct is not None and risk_pct == risk_pct) else "wide")
+        return (f"Surfaced but capped — {kind}, risk {rp} exceeds the tight-risk cap; "
+                f"Watchlist tier (risk-defined entry, no measured target).")
     fails = [g for g in gates if not g.passed]
     if cls == "near":
         if pattern is None:
             return f"Gates pass but no valid pattern yet ({stage}) — watchlist it."
-        return f"Gates pass but R:R only {rr:.1f}:1 (< 5:1) — wait for a tighter entry."
+        if rr_txt:
+            return f"Gates pass but R:R only {rr_txt} (< 5:1) — wait for a tighter entry."
+        return f"Gates pass but no measured setup yet ({stage}) — watchlist it."
     # fail
     reasons = "; ".join(g.detail for g in fails[:3])
     return f"Not a Pinpoint setup right now: {reasons}."
@@ -309,6 +380,27 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
     result = score_layers(base_layers,
                           partials={"tight_contraction": comp["compression_score"]})
 
+    # PROTOTYPE (Issue-1 reconciliation): when RECONCILED_GATING is True, override
+    # the OLD classification with the pipeline-matched one. Inert when False
+    # (default) — the live dashboard path is unchanged. ef/sling/setup are all
+    # computed above, so this still reflects a fresh live recomputation.
+    setup_kind = ("earnings flag" if ef["detected"]
+                  else "slingshot reclaim" if sling["detected"] else "")
+    eff_setup = setup
+    if RECONCILED_GATING:
+        # ef/sling have no measured pattern -> synthesize their setup the SAME way
+        # enrich_focus does (recent-5-bar-high trigger + shakeout/recent-low stop)
+        # so the D4 cap can read a real risk%.
+        if eff_setup is None and (ef["detected"] or sling["detected"]) and have_ohlcv:
+            trig = float(d["High"].iloc[-min(5, len(d)):].max())
+            ss = (float(sling["shakeout_low"]) if sling["detected"] and sling.get("shakeout_low")
+                  else float(d["Low"].iloc[-CONFIG.entry.stop_lookback:].min()))
+            eff_setup = entries_mod.compute_setup(trig, ss, None)
+        classification = _reconciled_classification(
+            row, eff_setup, pat, ef["detected"], sling["detected"], rs, g)
+    verdict_risk_pct = ((eff_setup.risk / eff_setup.entry) * 100.0
+                        if (eff_setup is not None and eff_setup.entry) else None)
+
     theme_label = theme_ctx.theme_label(sector, industry) if theme_ctx else ""
     growth = fundamentals_mod.assess_row(row)
     contraction = ohlcv_mod.emas_converged(d) if have_ohlcv else False
@@ -383,5 +475,6 @@ def _grade_one(ticker, row, regime, theme_ctx, ipo_ctx, ohlcv_provider, index_cl
         sales_growth=row.get("sales_past5y"), pct_below_high=row.get("pct_below_high"),
         stage_label=stage.label)
     pr.exit_signals = flags_mod.exit_signals(d if have_ohlcv else None)
-    pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr)
+    pr.verdict = _verdict(classification, gates, stage.label, pr.pattern, rr,
+                          setup_kind=setup_kind, risk_pct=verdict_risk_pct)
     return pr
