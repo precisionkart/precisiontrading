@@ -94,7 +94,7 @@ t1_rows = list(t1.iterrows())
 focus_row = t1_rows[0] if t1_rows else None
 rest_t1 = t1_rows[1:]
 
-# ---- Today's focus + open positions, side by side (mockup grid-a) ----
+# ---- Today's focus (left) + open positions over sector strength (right) ----
 col_l, col_r = st.columns([1.62, 1], gap="medium")
 with col_l:
     if focus_row is not None:
@@ -106,23 +106,20 @@ with col_l:
                     unsafe_allow_html=True)
 with col_r:
     ui.positions_widget(lives)
+    ui.sector_ladder(scan.get("themes", []))      # moved up: below Open Positions
 
-# ---- Sector strength + the rest of the setups, side by side (mockup grid-b) ----
-col_sl, col_sr = st.columns([1, 1.62], gap="medium")
-with col_sl:
-    ui.sector_ladder(scan.get("themes", []))
-with col_sr:
-    # Build the ranked rows for the table: the FULL ranked list — all Elite
-    # (tier 1) + all Good (tier 2). The focus stock is shown as the big card
-    # above AND included here as the table's first row.
-    table_rows = ([row.to_dict() for _, row in t1.iterrows()]
-                  + [row.to_dict() for _, row in t2.iterrows()])
+# ---- Today's setups — FULL WIDTH ----
+# Build the ranked rows for the table: the FULL ranked list — all Elite (tier 1)
+# + all Good (tier 2). The focus stock is shown as the big card above AND
+# included here as the table's first row.
+table_rows = ([row.to_dict() for _, row in t1.iterrows()]
+              + [row.to_dict() for _, row in t2.iterrows()])
 
-    def _pick(tk):
-        st.session_state["mp_prefill"] = tk
-        st.switch_page("views/my_picks.py")
+def _pick(tk):
+    st.session_state["mp_prefill"] = tk
+    st.switch_page("views/my_picks.py")
 
-    ui.setups_table(table_rows, _pick, n_total=scanned, key="setups")
+ui.setups_table(table_rows, _pick, n_total=scanned, key="setups")
 if len(t3):
     st.markdown("<div class='ppx-h' style='font-size:14px;margin-top:18px'>Watchlist (50-64)"
                 "</div>", unsafe_allow_html=True)
