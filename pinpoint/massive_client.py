@@ -147,6 +147,7 @@ class MassiveClient:
         results = (j or {}).get("results") or []
         out = {"eps_qoq": _nan(), "sales_qoq": _nan(), "eps_this_y": _nan(),
                "eps_past5y": _nan(), "sales_past5y": _nan(),
+               "net_margin": _nan(), "roe": _nan(),
                "latest_filing_date": None, "latest_period_end": None}
         if not results:
             return out
@@ -168,6 +169,31 @@ class MassiveClient:
 
         eps = [_val(r, "diluted_earnings_per_share") for r in q]
         rev = [_val(r, "revenues") for r in q]
+
+        # Net margin & ROE on a TTM (trailing-4-quarter) basis — the conventional
+        # figures. net_margin = sum(net_income, 4Q) / sum(revenue, 4Q); roe =
+        # sum(net_income, 4Q) / latest quarter-end equity. Reads net_income from
+        # the income statement and total equity from the balance sheet. Needs a
+        # full 4 quarters (no partial sums); graceful NaN on any missing input;
+        # TTM revenue sum <= 0 -> margin NaN, equity <= 0 -> ROE NaN.
+        def _bs_val(row, field):
+            bs = (row.get("financials") or {}).get("balance_sheet", {}) or {}
+            v = (bs.get(field) or {}).get("value")
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return _nan()
+
+        ni = [_val(r, "net_income_loss") for r in q]
+        if len(q) >= 4:
+            ni4, rev4 = ni[0:4], rev[0:4]
+            if all(v == v for v in ni4) and all(v == v for v in rev4):
+                ni_ttm, rev_ttm = sum(ni4), sum(rev4)
+                eq0 = _bs_val(q[0], "equity")
+                if rev_ttm > 0:
+                    out["net_margin"] = ni_ttm / rev_ttm * 100.0
+                if eq0 == eq0 and eq0 > 0:
+                    out["roe"] = ni_ttm / eq0 * 100.0
 
         def _growth(cur, prior):
             if cur != cur or prior != prior or prior == 0:
