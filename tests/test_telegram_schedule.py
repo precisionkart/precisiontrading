@@ -63,3 +63,28 @@ def test_quiet_cycle_sends_nothing():
 def test_after_hours_empty_returns_none():
     assert ts.after_hours_text([]) is None
     assert ts.after_hours_text([{"ticker": "X", "price": 10.0, "pct": 5.0}]) is not None
+
+
+def test_baseline_reference_no_new_setup_spam():
+    # diffing the SAME list against a freshly-established baseline -> silence,
+    # NOT a "new setup" alert for every existing name.
+    setups = {**_setup("A", 80, 95, 50, 47, 48), **_setup("B", 70, 90, 60, 57, 58),
+              **_setup("C", 66, 88, 30, 28, 29)}
+    prev = ts.establish_baseline(setups)
+    alerts, _ = ts.detect_changes(prev, setups, [])
+    assert alerts == []
+
+
+def test_new_entry_not_double_reported_as_big_move():
+    # A name that just ENTERED Focus must fire NEW SETUP only — never BIG MOVE,
+    # even if a baseline entry exists with a large delta.
+    prev = ts.establish_baseline(_setup("OLD", 70, 90, 50, 47, 48))   # focus = [OLD]
+    prev["baseline"]["NEWN"] = {"score": 50, "rs": 70}               # big gap vs current
+    setups = _setup("NEWN", 70, 90, 50, 47, 48)                      # +20 score, +20 RS
+    alerts, _ = ts.detect_changes(prev, setups, [])
+    assert any("NEW SETUP" in a and "NEWN" in a for a in alerts)
+    assert not any("BIG MOVE" in a and "NEWN" in a for a in alerts)
+
+
+def test_thresholds_are_safer_defaults():
+    assert ts.SCORE_MOVE_ALERT >= 15.0 and ts.RS_MOVE_ALERT >= 10.0

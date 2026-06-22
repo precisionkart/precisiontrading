@@ -29,13 +29,26 @@ from dataclasses import dataclass
 from .config import CONFIG
 from .telegram import get_bot
 
+# Load .env on startup the SAME way telegram_bot.py / pinpoint/telegram.py do, so
+# a bare `python -m pinpoint.telegram_schedule` picks up TELEGRAM_BOT_TOKEN /
+# TELEGRAM_CHAT_ID (and NEW_TELEGRAM_SCHEDULE) with no manual `source .env`.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:  # noqa: BLE001 — python-dotenv optional; env may already be set
+    pass
+
 # ── master flag — live sends are OFF until this is true ───────────────────────
 NEW_TELEGRAM_SCHEDULE = os.environ.get("NEW_TELEGRAM_SCHEDULE", "").strip().lower() \
     in ("1", "true", "yes", "on")
 
 # ── TUNABLE thresholds for Part B (named constants — adjust freely) ───────────
-SCORE_MOVE_ALERT = 8.0      # |Δ pinpoint_score| since the morning baseline -> alert
-RS_MOVE_ALERT = 5.0         # |Δ RS| since the morning baseline -> alert
+# Safer starting defaults: deliberately hard to trip on day one so the first live
+# run isn't noisy. A "big move" requires a name ALREADY on the list to shift this
+# much vs the MORNING baseline; a name newly entering Focus is a NEW SETUP alert,
+# not a big move (enforced in detect_changes). Tune down once you see real data.
+SCORE_MOVE_ALERT = 15.0     # |Δ pinpoint_score| since the morning baseline -> alert
+RS_MOVE_ALERT = 10.0        # |Δ RS| since the morning baseline -> alert
 AFTER_HOURS_MOVE_PCT = 3.0  # |after-hours %move| on a watched/open name -> notable
 
 STATE_PATH = os.path.join(CONFIG.paths.data_dir, "telegram_state.json")
@@ -269,8 +282,12 @@ def detect_changes(prev: dict, setups: dict, position_alerts: list) -> tuple[lis
             alerts.append(f"➖ *DROPPED* `{tk}` left the Focus list.")
             alerted["focus_dropped"].append(tk)
 
-    # 4) BIG score/RS move vs the morning baseline [tunable thresholds]
+    # 4) BIG score/RS move vs the morning baseline [tunable thresholds].
+    #    Only for names ALREADY on the list — a name that just entered Focus is a
+    #    NEW SETUP alert above, never also a BIG MOVE (no double-reporting).
     for tk in sorted(cur_focus & set(baseline)):
+        if tk not in prev_focus:
+            continue
         d = setups[tk]
         ds = d["score"] - _f(baseline[tk].get("score"))
         dr = d["rs"] - _f(baseline[tk].get("rs"))
@@ -395,6 +412,14 @@ def run_intraday(dry_run: bool = False) -> list:
     cache = store.load_scan_cache()
     setups, _ = gather_setups(cache)
     prev = load_state()
+    # First reference of the day (no baseline yet — e.g. the 08:00 morning brief
+    # hasn't run, or state was cleared): ESTABLISH the baseline and stay SILENT,
+    # so we never fire a "new setup" alert for the entire existing list. The
+    # morning brief normally sets this baseline; this is the safety net.
+    if not prev.get("baseline") and not prev.get("focus"):
+        if not dry_run:
+            save_state(establish_baseline(setups))
+        return []
     alerts, new_state = detect_changes(prev, setups, gather_position_alerts())
     if not dry_run:
         save_state(new_state)
