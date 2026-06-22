@@ -50,6 +50,12 @@ NEW_TELEGRAM_SCHEDULE = os.environ.get("NEW_TELEGRAM_SCHEDULE", "").strip().lowe
 SCORE_MOVE_ALERT = 15.0     # |Δ pinpoint_score| since the morning baseline -> alert
 RS_MOVE_ALERT = 10.0        # |Δ RS| since the morning baseline -> alert
 AFTER_HOURS_MOVE_PCT = 3.0  # |after-hours %move| on a watched/open name -> notable
+# Part-B safety net (BUG 3): if MORE than this fraction of the CURRENT focus list
+# is "new" vs the persisted baseline, the focus UNIVERSE was wholesale-replaced
+# (e.g. by the EOD scan's "new for tomorrow" list) — silently re-baseline and
+# alert nothing, rather than fire a NEW SETUP storm. The EOD slot also re-baselines
+# explicitly; this catches any other path that swaps the universe without one.
+UNIVERSE_SWAP_FRACTION = 0.5
 
 STATE_PATH = os.path.join(CONFIG.paths.data_dir, "telegram_state.json")
 
@@ -382,6 +388,11 @@ def dispatch_scheduled(slot: str, dry_run: bool = False, price_provider=None) ->
         else:
             bot.send_eod_scan(regime=_regime(cache), new_setups=new_setups, promoted=[],
                               degraded=[], open_positions=_positions(), sectors=_sectors(cache))
+            # Re-establish the change-detection baseline on the POST-EOD focus
+            # universe (the "new for tomorrow" list the EOD scan just wrote), so
+            # the next intraday diff doesn't flag the whole new list as NEW SETUP
+            # (BUG 3). Same call the morning slot makes — dry-run never touches state.
+            save_state(establish_baseline(setups))
         return
 
     if slot == "morning":
@@ -417,6 +428,18 @@ def run_intraday(dry_run: bool = False) -> list:
     # so we never fire a "new setup" alert for the entire existing list. The
     # morning brief normally sets this baseline; this is the safety net.
     if not prev.get("baseline") and not prev.get("focus"):
+        if not dry_run:
+            save_state(establish_baseline(setups))
+        return []
+    # Safety net (BUG 3): if the focus UNIVERSE was wholesale-replaced since the
+    # baseline — MORE than UNIVERSE_SWAP_FRACTION of the current list is "new" —
+    # treat it as a universe swap (e.g. an EOD scan whose slot re-baseline didn't
+    # run). Silently RE-BASELINE and send NOTHING this cycle, instead of firing a
+    # NEW SETUP for every fresh name. A normal handful of new entries falls below
+    # the threshold and still alerts via detect_changes below.
+    cur_focus = set(setups)
+    new_names = cur_focus - set(prev.get("focus", []))
+    if cur_focus and len(new_names) > UNIVERSE_SWAP_FRACTION * len(cur_focus):
         if not dry_run:
             save_state(establish_baseline(setups))
         return []

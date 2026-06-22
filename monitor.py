@@ -33,6 +33,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 STORE_DIR = os.path.join(HERE, "data", "store")
 POSITIONS_PATH = os.path.join(STORE_DIR, "positions.json")
 ALERTS_PATH = os.path.join(STORE_DIR, "alerts.json")
+MONITOR_STATE_PATH = os.path.join(STORE_DIR, "monitor_state.json")
 MAX_ALERTS = 200
 
 PARABOLIC_PCT = 20.0   # > 20% above 5 EMA -> climax trim (book)
@@ -168,6 +169,45 @@ def _send_telegram(text) -> bool:
         return False
 
 
+# ── alert dedupe state (data/store/monitor_state.json) ────────────────────────
+# Mirrors telegram_schedule's per-(ticker,kind) suppression: each alert event
+# fires ONCE while a position stays OPEN. The key is cleared when the ticker
+# leaves OPEN (closed/exited), so a future re-entry re-arms its alerts. This is
+# the missing dedupe memory that caused the same HARD STOP to re-fire every cycle.
+def _load_sent() -> set:
+    data = _load_json(MONITOR_STATE_PATH, {})
+    if isinstance(data, dict):
+        return set(data.get("sent", []))
+    return set()
+
+
+def _save_sent(sent_keys) -> None:
+    _atomic_write(MONITOR_STATE_PATH, {"sent": sorted(sent_keys)})
+
+
+def prune_sent(sent_keys, open_tickers) -> set:
+    """Drop keys for tickers no longer OPEN so a re-entry can re-alert.
+    `open_tickers` is the set of currently-OPEN tickers."""
+    open_set = {str(t).upper() for t in open_tickers}
+    return {k for k in sent_keys if k.split(":", 1)[0] in open_set}
+
+
+def select_to_send(notable, sent_keys, open_tickers) -> tuple:
+    """PURE dedupe (testable). Prune keys for closed tickers, then return
+    (alerts_to_send, updated_sent_keys) — skipping any (ticker, kind) already in
+    the sent-set and marking each chosen alert's key as sent. Mirrors
+    telegram_schedule.detect_changes, which marks an event when it is emitted."""
+    sent = prune_sent(sent_keys, open_tickers)
+    to_send = []
+    for a in notable:
+        key = f"{str(a.get('ticker', '')).upper()}:{a.get('kind')}"
+        if key in sent:
+            continue
+        to_send.append(a)
+        sent.add(key)
+    return to_send, sent
+
+
 def _check_pending(positions: list) -> int:
     """Promote PENDING positions to OPEN when their buy-stop entry is hit, and
     fire an entry-triggered Telegram. Returns the number promoted; rewrites
@@ -209,9 +249,15 @@ def main() -> int:
     # 2) exit monitoring (stop / EMA / trim) fires ONLY for positions you're
     #    actually in — status == OPEN. PENDING handled above; CLOSED skipped.
     open_positions = [p for p in positions if str(p.get("status", "")).upper() == "OPEN"]
+    open_tickers = {str(p.get("ticker", "")).upper() for p in open_positions if p.get("ticker")}
+
+    # Alert dedupe memory: drop keys for tickers no longer OPEN so a re-entry
+    # re-arms (a closed position's HARD_STOP key is cleared here).
+    sent_keys = prune_sent(_load_sent(), open_tickers)
 
     print(f"monitor: {len(open_positions)} open position(s)")
     if not open_positions:
+        _save_sent(sent_keys)          # persist the pruning (clears closed positions)
         return 0
 
     tickers = [str(p.get("ticker", "")).upper() for p in open_positions if p.get("ticker")]
@@ -239,15 +285,20 @@ def main() -> int:
     combined = (existing + new_alerts)[-MAX_ALERTS:]
     _atomic_write(ALERTS_PATH, combined)
 
-    # notify on CRITICAL / HIGH via the formatted Pinpoint Telegram alert
+    # notify on CRITICAL / HIGH — but ONCE per (ticker, kind) while the position
+    # stays OPEN. select_to_send prunes closed-ticker keys and skips events already
+    # alerted; the sent-set is persisted so repeats are suppressed across cycles.
     notable = [a for a in new_alerts if a["urgency"] in ("CRITICAL", "HIGH")]
+    to_send, sent_keys = select_to_send(notable, sent_keys, open_tickers)
+    _save_sent(sent_keys)              # mark emitted (mirrors telegram_schedule)
+    n_dupes = len(notable) - len(to_send)
     sent = 0
     try:
         from pinpoint.telegram import get_bot
         bot = get_bot()
     except Exception:  # noqa: BLE001
         bot = None
-    for a in notable:
+    for a in to_send:
         payload = {**a, "type": a.get("kind")}      # monitor uses 'kind'; bot wants 'type'
         if bot is not None and bot.enabled:
             if bot.send_position_alert(payload):
@@ -256,7 +307,7 @@ def main() -> int:
             sent += 1
 
     print(f"monitor: {len(new_alerts)} alert(s) "
-          f"({len(notable)} critical/high, {sent} sent via Telegram)")
+          f"({len(notable)} critical/high, {n_dupes} already-alerted, {sent} sent via Telegram)")
     return 0
 
 

@@ -35,6 +35,14 @@ from pinpoint.config import CONFIG
 from pinpoint.massive_client import MassiveClient
 
 
+# scan.py's own Telegram alerts are OFF by default — pinpoint.telegram_schedule
+# now owns ALL messaging. scan.py just refreshes the cache and stays silent.
+# Set SCAN_PY_TELEGRAM=true to re-enable the legacy in-scan alerts (the
+# send_scan_telegram capability is kept, just not called unless armed).
+SCAN_PY_TELEGRAM = os.environ.get("SCAN_PY_TELEGRAM", "").strip().lower() \
+    in ("1", "true", "yes", "on")
+
+
 # --------------------------------------------------------------------------
 # Terminal rendering (rich if available, else plain pandas).
 # --------------------------------------------------------------------------
@@ -281,7 +289,11 @@ def run_live(args) -> int:
 
     _print_written_files(wrote_cache, want_targets or want_focus)
     _print_final_status(targets, focus, earnings_df, ipo_watch, any_403)
-    send_scan_telegram(args)
+    # telegram_schedule owns all messaging now — scan.py is silent unless the
+    # legacy in-scan alerts are explicitly re-armed via SCAN_PY_TELEGRAM. The
+    # cache (saved above) is already complete regardless of this branch.
+    if SCAN_PY_TELEGRAM:
+        send_scan_telegram(args)
     return 0
 
 
