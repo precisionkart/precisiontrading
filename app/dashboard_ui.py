@@ -38,7 +38,18 @@ _CSS = """
   --ppx-bull:#16A06A; --ppx-bull-soft:#E7F6EF; --ppx-bear:#E5484D; --ppx-bear-soft:#FCECEC;
   --ppx-warn:#D9870B; --ppx-warn-soft:#FBF1DE;
   --ppx-disp:'Space Grotesk','Inter',sans-serif; --ppx-mono:'JetBrains Mono',ui-monospace,monospace;
+  /* ── single spacing scale — the one source of truth for the whole dashboard ── */
+  --ppx-pad-x:16px;   /* horizontal padding inside every card */
+  --ppx-pad-y:14px;   /* top/bottom padding inside every card */
+  --ppx-gap:12px;     /* vertical rhythm between stacked cards / components */
+  --ppx-gap-sm:8px;   /* tight inner gap */
+  --ppx-sec:20px;     /* space above a section header */
 }
+/* uniform vertical rhythm + top-aligned columns (removes the empty gap that
+   appears under a shorter column such as Today's Focus). Dashboard-scoped because
+   this _CSS is only injected on the dashboard view. */
+div[data-testid="stVerticalBlock"]{gap:var(--ppx-gap)}
+div[data-testid="stHorizontalBlock"]{align-items:flex-start}
 /* grade colours shared by every meter / number */
 .ppx-g-strong{--g:#0E9C63}.ppx-g-good{--g:#2E9E57}.ppx-g-ok{--g:#C77D08}.ppx-g-weak{--g:#D83A3F}
 .ppx-meter{height:6px;background:var(--ppx-line);border-radius:99px;overflow:hidden;display:block}
@@ -47,8 +58,8 @@ _CSS = """
 .ppx-up{color:var(--ppx-bull)!important}.ppx-dn{color:var(--ppx-bear)!important}.ppx-flat{color:var(--ppx-muted)!important}
 
 /* section headers */
-.ppx-h{font-family:var(--ppx-disp);font-weight:600;font-size:17px;color:var(--ppx-ink);letter-spacing:-.01em;margin:34px 0 2px}
-.ppx-sub{font-family:var(--ppx-mono);font-size:12px;color:var(--ppx-muted);margin:0 0 14px}
+.ppx-h{font-family:var(--ppx-disp);font-weight:600;font-size:17px;color:var(--ppx-ink);letter-spacing:-.01em;margin:var(--ppx-sec) 0 2px}
+.ppx-sub{font-family:var(--ppx-mono);font-size:12px;color:var(--ppx-muted);margin:0 0 var(--ppx-gap)}
 
 /* setups table (mockup .tbl) */
 .ppx-tbl{width:100%;border-collapse:collapse}
@@ -71,7 +82,7 @@ _CSS = """
 .ppx-tbl .lvl{font-family:var(--ppx-mono);font-weight:600;font-size:13px}
 .ppx-tbl .lvl-entry{color:var(--ppx-bull)}.ppx-tbl .lvl-stop{color:var(--ppx-bear)}.ppx-tbl .lvl-tgt{color:var(--ppx-ink)}
 /* setups rebuilt as real Streamlit rows: thead-style header strip + row dividers */
-.ppx-thr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1.2fr 1.2fr 1.2fr 1fr 1.8fr 1.3fr;gap:.5rem;align-items:center;padding:9px 6px 7px;border-bottom:1px solid var(--ppx-line)}
+.ppx-thr{display:grid;grid-template-columns:2.2fr 1fr 1fr 1.2fr 1.2fr 1.2fr 1fr 1.8fr 1.3fr;gap:1rem;align-items:center;padding:9px 0 7px;border-bottom:1px solid var(--ppx-line)}
 .ppx-thr>span{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
 .ppx-thr>span.num{text-align:right}
 [class*="st-key-setups_row"]{border-bottom:1px solid var(--ppx-line);padding:2px 0}
@@ -79,7 +90,7 @@ _CSS = """
 
 /* generic card */
 .ppx-card{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:14px;box-shadow:0 1px 2px rgba(16,24,40,.04);overflow:hidden}
-.ppx-card-h{display:flex;align-items:center;gap:9px;padding:14px 16px;border-bottom:1px solid var(--ppx-line)}
+.ppx-card-h{display:flex;align-items:center;gap:9px;padding:var(--ppx-pad-y) var(--ppx-pad-x);border-bottom:1px solid var(--ppx-line)}
 .ppx-card-h h3{margin:0;font-family:var(--ppx-disp);font-weight:600;font-size:14.5px;color:var(--ppx-ink)}
 .ppx-card-h .s{font-size:12px;color:var(--ppx-muted)}
 .ppx-card-h .right{margin-left:auto;display:flex;align-items:center;gap:9px}
@@ -89,8 +100,8 @@ _CSS = """
 .ppx-chip.bear{background:var(--ppx-bear-soft);color:var(--ppx-bear)}.ppx-chip.bear .dot{background:var(--ppx-bear)}
 
 /* KPI strip */
-.ppx-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin:6px 0 22px}
-.ppx-kpi{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:12px;padding:14px 15px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.ppx-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--ppx-gap);margin:6px 0 var(--ppx-sec)}
+.ppx-kpi{background:var(--ppx-surface);border:1px solid var(--ppx-line);border-radius:12px;padding:var(--ppx-pad-y) var(--ppx-pad-x);box-shadow:0 1px 2px rgba(16,24,40,.04)}
 .ppx-kpi .lab{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
 .ppx-kpi .big{font-family:var(--ppx-disp);font-size:24px;font-weight:600;color:var(--ppx-ink);margin-top:7px;display:flex;align-items:baseline;gap:7px;letter-spacing:-.01em}
 .ppx-kpi .big .u{font-family:var(--ppx-mono);font-size:13px;color:var(--ppx-muted);font-weight:500}
@@ -106,7 +117,7 @@ _CSS = """
 .ppx-grade.ppx-g-weak{background:var(--ppx-bear-soft);border-color:#F3CFD0}
 
 /* sector ladder */
-.ppx-ladder{padding:6px 16px 12px}
+.ppx-ladder{padding:var(--ppx-gap-sm) var(--ppx-pad-x) var(--ppx-pad-y)}
 .ppx-rung{display:grid;grid-template-columns:18px 116px 1fr 50px;gap:11px;align-items:center;padding:7px 0}
 .ppx-rung+.ppx-rung{border-top:1px solid var(--ppx-line)}
 .ppx-rung .rk{font-family:var(--ppx-mono);font-size:12px;color:var(--ppx-muted);font-weight:600;text-align:center}
@@ -118,11 +129,11 @@ _CSS = """
 .ppx-leadflag{font-size:9px;font-weight:700;letter-spacing:.05em;color:var(--ppx-brand);background:var(--ppx-brand-soft);border-radius:5px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 
 /* positions widget */
-.ppx-pos-head{display:flex;align-items:center;gap:9px;padding:2px 2px 12px}
+.ppx-pos-head{display:flex;align-items:center;gap:9px;padding:0 0 var(--ppx-gap-sm)}
 .ppx-pos-head h3{margin:0;font-family:var(--ppx-disp);font-weight:600;font-size:15px;color:var(--ppx-ink)}
 .ppx-pos-head .s{font-size:12px;color:var(--ppx-muted)}
 .ppx-pos-head .right{margin-left:auto}
-.ppx-pos{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:11px 0;align-items:center;border-top:1px solid var(--ppx-line)}
+.ppx-pos{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:var(--ppx-gap-sm) 0;align-items:center;border-top:1px solid var(--ppx-line)}
 .ppx-pos .who{display:flex;align-items:baseline;gap:8px}
 .ppx-pos .who b{font-family:var(--ppx-disp);font-weight:700;font-size:15px;color:var(--ppx-ink)}
 .ppx-pos .who .e{font-family:var(--ppx-mono);font-size:11px;color:var(--ppx-muted)}
@@ -135,13 +146,13 @@ _CSS = """
 .ppx-st-ema{color:#B5730A}.ppx-st-ema .dot{background:var(--ppx-warn)}
 .ppx-pos .track{grid-column:2;width:118px}
 .ppx-pos .track .cap{font-family:var(--ppx-mono);font-size:10px;color:var(--ppx-muted);display:flex;justify-content:space-between;margin-bottom:3px}
-.ppx-pos-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 2px 2px;margin-top:4px;border-top:1px solid var(--ppx-line)}
+.ppx-pos-foot{display:flex;align-items:center;justify-content:space-between;padding:var(--ppx-gap-sm) 0 0;margin-top:0;border-top:1px solid var(--ppx-line)}
 .ppx-pos-foot .lab{font-size:12px;color:var(--ppx-muted)}
 .ppx-pos-foot b{font-family:var(--ppx-mono);font-weight:700;font-size:16px}
-.ppx-pos-empty{padding:14px 2px;color:var(--ppx-muted);font-size:13px}
+.ppx-pos-empty{padding:var(--ppx-pad-y) 0;color:var(--ppx-muted);font-size:13px}
 
 /* setup card body (lives inside a bordered st.container) */
-.ppx-card-body{padding:2px 2px 4px}
+.ppx-card-body{padding:0 2px}
 .ppx-cb-top{display:flex;align-items:flex-start;gap:14px}
 .ppx-cb-id{min-width:0}
 .ppx-eyebrow{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ppx-brand);background:var(--ppx-brand-soft);padding:3px 8px;border-radius:99px;margin-bottom:7px}
@@ -163,15 +174,15 @@ _CSS = """
 .ppx-lvl .sub{font-family:var(--ppx-mono);font-size:10px;color:var(--ppx-muted);margin-top:2px}
 
 /* focus card middle band — chart, ATR caption, signal tags, checklist */
-.ppx-chart{padding:14px 2px 2px}
+.ppx-chart{padding:var(--ppx-gap) 2px 0}
 .ppx-chart svg{width:100%;height:84px;display:block}
 .ppx-chart .cap{font-family:var(--ppx-mono);font-size:11px;color:var(--ppx-muted);margin-top:6px}
-.ppx-signals{display:flex;flex-wrap:wrap;gap:7px;padding:10px 2px 2px}
+.ppx-signals{display:flex;flex-wrap:wrap;gap:7px;padding:var(--ppx-gap) 2px 0}
 .ppx-tag{font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:7px;display:inline-flex;align-items:center;gap:6px}
 .ppx-tag .dot{width:6px;height:6px;border-radius:99px}
 .ppx-tag.bull{background:var(--ppx-bull-soft);color:#0F8B5C}.ppx-tag.bull .dot{background:#22C77E}
 .ppx-tag.warn{background:var(--ppx-warn-soft);color:#B5730A}.ppx-tag.warn .dot{background:var(--ppx-warn)}
-.ppx-check{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:12px 2px 2px}
+.ppx-check{display:flex;align-items:center;gap:13px;flex-wrap:wrap;padding:var(--ppx-gap) 2px 0}
 .ppx-check .score{display:flex;align-items:center;gap:9px;min-width:180px;flex:1}
 .ppx-check .score .ppx-meter{flex:1}
 .ppx-check .score .lab{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ppx-muted);font-weight:600}
@@ -182,7 +193,7 @@ _CSS = """
 /* round the bordered st.containers used for setup cards + positions (best-effort) */
 [class*="st-key-ppxcard"] div[data-testid="stVerticalBlockBorderWrapper"],
 [class*="st-key-ppxpos"] div[data-testid="stVerticalBlockBorderWrapper"]{border-radius:14px!important}
-[class*="st-key-ppxcard"]{margin-bottom:11px}
+[class*="st-key-ppxcard"]{margin-bottom:var(--ppx-gap)}
 """
 
 

@@ -299,8 +299,10 @@ def run_live(args) -> int:
 
 def send_scan_telegram(args) -> None:
     """Best-effort Telegram alerts off the saved scan cache (Part 3). Morning
-    brief on `--earnings`; EOD scan + watchlist promotions/degradations + Friday
-    wrap on `--all`/`--targets`. Never raises — Telegram never blocks a scan."""
+    brief on `--earnings`; the "📍 EOD Scan Complete" message + watchlist
+    promotions/degradations + Friday wrap ONLY on `--eod`; the short
+    scan-complete summary on every `--all`/`--targets` run (intraday + EOD).
+    Never raises — Telegram never blocks a scan."""
     try:
         from pinpoint.telegram import get_bot
         bot = get_bot()
@@ -355,7 +357,11 @@ def send_scan_telegram(args) -> None:
             sectors.append({"name": (t.get("theme") or t.get("name") or str(t))
                             if isinstance(t, dict) else str(t)})
 
-        is_eod = bool(getattr(args, "all", False) or getattr(args, "targets", False))
+        # EOD is now an EXPLICIT flag (not "any --all run") so the "📍 EOD Scan
+        # Complete" message fires ONLY on the real end-of-day run, not on the
+        # ~40 intraday --all scans/day. Intraday --all still sends the short
+        # scan-complete summary below.
+        is_eod = bool(getattr(args, "eod", False))
         is_morning = bool(getattr(args, "earnings", False)) and not is_eod
 
         if is_morning:
@@ -390,7 +396,21 @@ def send_scan_telegram(args) -> None:
                 bot.send_watchlist_promoted(**p)
             for d in degraded:
                 bot.send_watchlist_degraded(**d)
-            # tier counts across the ranked lists (focus=Elite/Good, targets=total)
+            if now_uk.weekday() == 4:                       # Friday weekly wrap
+                all_pos = _store.load_positions()
+                wk_start = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
+                week_trades = [p for p in all_pos
+                               if (str(p.get("exit_date", ""))[:10] >= wk_start
+                                   or p.get("status") == "OPEN")]
+                week_r = sum(_f(p.get("r_multiple")) for p in week_trades)
+                weekend = [t for t, e in wl.items() if e.status in ("STALKING", "WATCHING")][:6]
+                bot.send_weekly_wrap(week_r=week_r, trades=week_trades, weekend_watchlist=weekend)
+            print("✅ Telegram EOD alerts sent")
+
+        # Short "scan complete" summary — sent on EVERY ranked scan (intraday
+        # --all/--targets AND the --eod run). Moved OUT of the is_eod block so
+        # intraday runs get only this and NOT the "EOD Scan Complete" message.
+        if getattr(args, "all", False) or getattr(args, "targets", False):
             focus_df = cache.lists.get("focus")
             targets_df = cache.lists.get("targets")
             n_elite = (len(focus_df[focus_df["tier"] == "Elite"])
@@ -404,16 +424,7 @@ def send_scan_telegram(args) -> None:
                 top_ticker=str(top["ticker"]) if top is not None else "none",
                 top_score=float(top["pinpoint_score"]) if top is not None else 0,
                 regime=cache.regime_state)
-            if now_uk.weekday() == 4:                       # Friday weekly wrap
-                all_pos = _store.load_positions()
-                wk_start = (datetime.date.today() - datetime.timedelta(days=5)).isoformat()
-                week_trades = [p for p in all_pos
-                               if (str(p.get("exit_date", ""))[:10] >= wk_start
-                                   or p.get("status") == "OPEN")]
-                week_r = sum(_f(p.get("r_multiple")) for p in week_trades)
-                weekend = [t for t, e in wl.items() if e.status in ("STALKING", "WATCHING")][:6]
-                bot.send_weekly_wrap(week_r=week_r, trades=week_trades, weekend_watchlist=weekend)
-            print("✅ Telegram EOD alerts sent")
+            print("✅ Telegram scan-complete summary sent")
     except Exception as exc:  # noqa: BLE001 — Telegram must never break a scan
         print(f"   (telegram alerts skipped: {exc})")
 
@@ -613,6 +624,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selftest", action="store_true",
                         help="run the offline deterministic pipeline on fixtures")
     parser.add_argument("--all", action="store_true", help="Targets + Focus + Earnings (live)")
+    parser.add_argument("--eod", action="store_true",
+                        help="mark this as the end-of-day run — sends the '📍 EOD Scan "
+                             "Complete / NEW FOR TOMORROW' Telegram message. Without it, an "
+                             "--all run sends only the short scan-complete summary.")
     parser.add_argument("--targets", action="store_true", help="build Targets (live)")
     parser.add_argument("--focus", action="store_true", help="build Focus (live)")
     parser.add_argument("--earnings", action="store_true", help="build Earnings (live)")
