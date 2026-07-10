@@ -46,17 +46,25 @@ jobs:
 
       - name: Run scan and publish
         env:
-          PINPOINT_REQUEST_DELAY: "2"      # gentler on Finviz from CI
+          PINPOINT_REQUEST_DELAY: "2"      # gentler on the data source from CI
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}   # REQUIRED — add in repo Settings → Secrets
         run: python scan.py --all --publish --cache-top 250
 
       - name: Publish to data branch
         run: |
+          # Abort rather than publish an empty/broken snapshot if the scan failed
+          # to produce the read-only payload (e.g. missing API key, upstream 4xx).
+          test -f data/latest_scan.json || { echo "::error::scan produced no data/latest_scan.json — not publishing"; exit 1; }
           git config user.name "pinpoint-bot"
           git config user.email "actions@users.noreply.github.com"
           git checkout -B data main
-          git add -f data/latest_scan.json \
-                     data/store/universe_latest.parquet data/store/universe_latest.json \
-                     data/ohlcv data/theme_history.json data/ipo_highs.json \
-                     data/earnings_watch.json
+          # Force-add each published artifact only if it exists, so a missing
+          # optional file (earnings/ipo/theme history) can't fail the whole step.
+          for p in data/latest_scan.json \
+                   data/store/universe_latest.parquet data/store/universe_latest.json \
+                   data/ohlcv data/theme_history.json data/ipo_highs.json \
+                   data/earnings_watch.json; do
+            [ -e "$p" ] && git add -f "$p" || echo "skip (absent): $p"
+          done
           git commit -m "scheduled scan $(date -u +%Y-%m-%dT%H:%MZ)" || echo "no changes"
           git push -f origin data

@@ -20,7 +20,11 @@ def _load_scan():
         return c.load_published()
     cache = store.load_scan_cache()
     if cache is None:
-        return None                      # truly no scan -> the dashboard empty state
+        # No local scan cache. If a committed latest_scan.json exists (the
+        # read-only cloud payload), render from it — this makes the deployed app
+        # work even when PINPOINT_CLOUD wasn't set in the hosting env, instead of
+        # showing an empty dashboard.
+        return c.load_published()        # None if that file is absent too
     # Load the most recent scan regardless of age. The prominent "Last refreshed"
     # badge (green/amber/red) communicates staleness — blanking real data behind
     # an is_today gate just hid usable setups between scans.
